@@ -37,7 +37,7 @@ Phase 0, the survey (`docs/plan.md`). No port code exists yet. Next steps:
 1. The user fills in `config.local.toml` from `config.example.toml`.
 2. ~~Extract the ExeFS into `build/`, list the modules and their sizes.~~ Done: `tools/extract_exefs.py` writes `build/extracted/v0/exefs` and `build/extracted/v262144/exefs`; title id `010055D009F78000` confirmed.
 3. ~~Find the SDK version string and the imports: NVN or another API, middleware, `nn::*` functions.~~ Done (`tools/survey_imports.py`): SDK 6.5.0, NVN plus the runtime GLSL compiler `glslc`, KTGL engine.
-4. Run the TotK lifter over `main` and count unknown instructions and unresolved jump tables.
+4. ~~Run the TotK lifter over `main` and count unknown instructions and unresolved jump tables.~~ Done: no unsupported instructions; 18 jump tables the resolver misses (see `docs/plan.md`).
 5. ~~Compare the `nn::*` imports with what the TotK host implements.~~ First pass done with step 3; see `docs/plan.md`.
 6. Write the answers into the table in `docs/plan.md` (facts only, no game data).
 
