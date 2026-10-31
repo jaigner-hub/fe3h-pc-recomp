@@ -36,15 +36,15 @@ Phase 0, the survey (`docs/plan.md`). No port code exists yet. Next steps:
 
 1. The user fills in `config.local.toml` from `config.example.toml`.
 2. ~~Extract the ExeFS into `build/`, list the modules and their sizes.~~ Done: `tools/extract_exefs.py` writes `build/extracted/v0/exefs` and `build/extracted/v262144/exefs`; title id `010055D009F78000` confirmed.
-3. Find the SDK version string and the imports: NVN or another API, middleware, `nn::*` functions.
+3. ~~Find the SDK version string and the imports: NVN or another API, middleware, `nn::*` functions.~~ Done (`tools/survey_imports.py`): SDK 6.5.0, NVN plus the runtime GLSL compiler `glslc`, KTGL engine.
 4. Run the TotK lifter over `main` and count unknown instructions and unresolved jump tables.
-5. Compare the `nn::*` imports with what the TotK host implements.
+5. ~~Compare the `nn::*` imports with what the TotK host implements.~~ First pass done with step 3; see `docs/plan.md`.
 6. Write the answers into the table in `docs/plan.md` (facts only, no game data).
 
 ## Open questions
 
 - Target update: 1.1.1 (v262144), decided. It is the latest update the user can dump; 1.2.0 (Cindered Shadows) is not available to them, so build around 1.1.1.
-- Graphics API: NVN is expected but unconfirmed.
+- Graphics API: NVN, confirmed. The game also links glslc and compiles GLSL at run time; find out how many shaders go that way and whether the rest ship precompiled.
 - Add-on content (Expansion Pass, Cindered Shadows) needs `aoc:u` and an extra RomFS mount, which TotK did not need.
 - Game logic may assume 30 fps.
 
