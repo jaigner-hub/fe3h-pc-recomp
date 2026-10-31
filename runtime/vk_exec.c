@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_exec.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/vk_exec.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; adds SetCopyImageStride (OP_COPY_IMG_STRIDE) for FE3H.
 // The op-stream replay core of the Vulkan back end: walks the command handles of
 // one submission into its command buffer, keeps render targets and fixed-function state, opens and closes dynamic
 // rendering passes and records clears and barriers. Draws, binds and dispatches go to vk_exec_op_draw
@@ -862,6 +862,7 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
         case OP_RASTER_DISCARD: ex->pipe.raster_discard = ((const p_flag *)a)->value != 0; break;
         case OP_PRIM_RESTART: ex->prim_restart = *(const p_prim_restart *)a; break;
         case OP_COPY_STRIDE: ex->copy_stride = ((const p_copy_stride *)a)->stride; break;
+        case OP_COPY_IMG_STRIDE: ex->copy_img_stride = ((const p_copy_stride *)a)->stride; break;
         case OP_SET_TEX_POOL: ex->tex_pool = ((const p_set_pool *)a)->pool, ex->tex_serial++; break;
         case OP_SET_SAMP_POOL: ex->samp_pool = ((const p_set_pool *)a)->pool; break;
         case OP_BARRIER: vk_exec_barrier(ex); break;

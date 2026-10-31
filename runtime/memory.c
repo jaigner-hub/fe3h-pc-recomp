@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/memory.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/memory.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; MapMemory also takes stacks from module data (FE3H).
 // Adapted from MacNativeGames games/totk/runtime/services.c and loader.c @ b75be8c (MIT, Copyright (c) 2026
 // MacNativeGames contributors), and LAS Recomp runtime/main.c and platform/windows.c @ da35b83 (MIT, Copyright (c)
 // 2026 Peiikai).
@@ -410,8 +410,10 @@ uint32_t mem_set_attribute(uint64_t a, uint64_t n, uint32_t mask, uint32_t at) {
     return R_OK;
 }
 
-// ---- 0x04/0x05 MapMemory, UnmapMemory: thread stacks move from heap or alias into the stack region by copy; the
-// source is inaccessible while moved and gets the contents back on unmap.
+// ---- 0x04/0x05 MapMemory, UnmapMemory: thread stacks move from heap, alias or a module's data (.data/.bss) into the
+// stack region by copy; the source is inaccessible while moved and gets the contents back on unmap. Module data is a
+// source in FE3H: SDK 6.5.0's nn::os aliases every thread stack (ThreadManager::CreateAliasStackUnsafe), and the game
+// keeps some stacks in main's .bss, which Horizon allows (code data may be aliased).
 static int alias_all_mapped(uint64_t a, uint64_t n) {   // under lock
     uint64_t first = (a - L.alias.base) / PAGE;
     for (uint64_t i = 0; i < n / PAGE; i++)
@@ -424,7 +426,7 @@ static uint32_t stack_move(int unmap, uint64_t dst, uint64_t src, uint64_t n) {
     if (!inside(dst, n, L.stack)) return R_INVALID_REGION;
     int in_heap = inside(src, n, (RtRange){L.heap.base, heap_size});
     int in_alias = inside(src, n, L.alias);
-    if (!in_heap && !in_alias) return R_INVALID_REGION;
+    if (!in_heap && !in_alias && module_data(src, n) < 0) return R_INVALID_REGION;
     AcquireSRWLockExclusive(&lock);
     uint32_t r = R_OK;
     if (in_alias && !alias_all_mapped(src, n)) {

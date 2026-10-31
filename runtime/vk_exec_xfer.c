@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_exec_xfer.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/vk_exec_xfer.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); adds SetCopyImageStride (OP_COPY_IMG_STRIDE) for FE3H.
 // Transfers of the Vulkan op-stream replay: buffer and texture copies, texture
 // clears, event signals, counter reports and conditional rendering. vk_exec.c calls vk_exec_op_xfer for these ops.
 //
@@ -396,7 +396,14 @@ static int buffer_side(const VkExec *ex, const Sub *s, uint64_t addr, uint64_t *
                   (unsigned long long)row, wb, s->bpb);
         return 0;
     }
-    uint64_t img = row * hb;
+    // Image stride (SetCopyImageStride): the buffer pitch from one layer or slice to the next, a whole number of rows
+    // of at least the copy's height, as Vulkan's bufferImageHeight expresses it; 0 = rows packed.
+    uint64_t img = ex->copy_img_stride > 0 ? (uint64_t)ex->copy_img_stride : row * hb;
+    if (img % row || img < row * hb) {
+        warn_once(W_REGION, "buffer copy image stride %llu is not a whole number of %llu-byte rows covering %u rows: "
+                  "skipped", (unsigned long long)img, (unsigned long long)row, hb);
+        return 0;
+    }
     *size = img * (s->nz - 1) + row * (hb - 1) + (uint64_t)wb * (uint64_t)s->bpb;
     VkMemSpan m;
     if (!addr || !vk_mem_resolve(addr, *size, &m) || m.avail < *size) {
@@ -407,7 +414,7 @@ static int buffer_side(const VkExec *ex, const Sub *s, uint64_t addr, uint64_t *
     VK_MEM_PICK(m);
     *span = m;
     *c = (VkBufferImageCopy){.bufferOffset = m.offset, .bufferRowLength = (uint32_t)(row / (uint64_t)s->bpb) * (uint32_t)s->bw,
-                             .bufferImageHeight = hb * (uint32_t)s->bh, .imageSubresource = sub_layers(s),
+                             .bufferImageHeight = (uint32_t)(img / row) * (uint32_t)s->bh, .imageSubresource = sub_layers(s),
                              .imageOffset = sub_offset(s), .imageExtent = sub_extent(s)};
     return 1;
 }

@@ -328,7 +328,7 @@ void vk_pool_fini(pool_t *p) {
     else destroy_rec(c, r);
 }
 
-// Requests were checked by the front end (nvn_api_core.c, MNG fe3h_vpool.c); apply them in order.
+// Requests were checked by the front end (nvn_api_core.c, MNG totk_vpool.c); apply them in order.
 int vk_pool_map_virtual(pool_t *v, int n, const void *requests) {
     const nvn_mapping_t *rq = requests;
     AcquireSRWLockExclusive(&pool_lock);

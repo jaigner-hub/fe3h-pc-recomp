@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/nvn_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; adds SetCopyImageStride (OP_COPY_IMG_STRIDE) for FE3H.
 // fe3h.exe --probe-nvn: the NVN front end and the null back end, called the way the
 // game calls them: through the real nvnp_* procs with a synthetic Cpu (AAPCS64 arguments in x0..x7 and v0..v7), on the
 // guest main thread, on the null back end whatever FE3H_GPU says. Checks, in order:
@@ -108,7 +108,7 @@ static void probe_device_and_pools(void) {
     CHECK(nvn_pool_find(U(pmem) + 0x100, 0x200) == P() && !nvn_pool_find(U(pmem) + PROBE_POOL_SIZE - 8, 16), "pool index");
     n_objects += 6;
 
-    // refused: no storage, PHYSICAL | VIRTUAL, a size that is not a 64 KiB multiple (MNG fe3h_vpool.c)
+    // refused: no storage, PHYSICAL | VIRTUAL, a size that is not a 64 KiB multiple (MNG totk_vpool.c)
     static NVNmemoryPool bad;
     CHECK(make_pool(&bad, NULL, 0x10000, NVN_MEMORY_POOL_FLAGS_CPU_CACHED) == 0, "a pool without storage is refused");
     CHECK(make_pool(&bad, gmem, PROBE_GPOOL_SIZE, NVN_MEMORY_POOL_FLAGS_PHYSICAL | NVN_MEMORY_POOL_FLAGS_VIRTUAL) == 0,
@@ -444,6 +444,7 @@ static uint64_t record_all(void) {
     REC(OP_SET_SAMP_POOL, CALL(nvnCommandBufferSetSamplerPool, U(c), U(&sp2)));
     REC(OP_COPY_B2T, CALL(nvnCommandBufferCopyBufferToTexture, U(c), 0x9000, U(&tex1), U(&view), U(&rg), 0));
     REC(OP_COPY_STRIDE, CALL(nvnCommandBufferSetCopyRowStride, U(c), 256));
+    REC(OP_COPY_IMG_STRIDE, CALL(nvnCommandBufferSetCopyImageStride, U(c), 4096));
     REC(OP_BLEND_COLOR, CALL(nvnCommandBufferSetBlendColor, U(c), U(rgba)));
     REC(OP_COPY_T2B, CALL(nvnCommandBufferCopyTextureToBuffer, U(c), U(&tex1), 0, U(&rg), 0xa000, 0));
     REC(OP_COPY_T2T, CALL(nvnCommandBufferCopyTextureToTexture, U(c), U(&tex1), 0, U(&rg), U(&tex2), 0, U(&rg2), 0));
@@ -633,6 +634,7 @@ static void parse_all(uint64_t h) {
             break;
         }
         case OP_COPY_STRIDE: CHECK(((const p_copy_stride *)a)->stride == 256, "COPY_STRIDE payload"); break;
+        case OP_COPY_IMG_STRIDE: CHECK(((const p_copy_stride *)a)->stride == 4096, "COPY_IMG_STRIDE payload"); break;
         case OP_BLEND_COLOR: CHECK(((const p_blend_color *)a)->rgba[2] == 0.3f, "BLEND_COLOR payload"); break;
         case OP_COPY_T2B: {
             const p_copy_b2t *p = a;
