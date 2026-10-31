@@ -1,0 +1,15 @@
+# Copy to config.local.toml (ignored by git) and point it at your own files.
+
+[input]
+# Base game as NSP or XCI. Title id believed to be 010055D009F78000; tools will verify it from the dump.
+base = 'C:\Games\FE3H\base.nsp'
+# Cumulative update NSP (title id ending in 800). Target version: see docs/plan.md.
+updates = ['C:\Games\FE3H\update.nsp']
+# Add-on content (Expansion Pass, Cindered Shadows), optional.
+dlc = []
+# Keys dumped from your own console. Never printed or copied by the tools.
+keys = 'C:\Switch\prod.keys'
+
+[work]
+# Extracted files, generated C and builds go here.
+dir = 'build'
