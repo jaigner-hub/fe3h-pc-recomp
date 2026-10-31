@@ -43,7 +43,7 @@ Phase 0, the survey (`docs/plan.md`). No port code exists yet. Next steps:
 
 ## Open questions
 
-- Target update. The user has 1.1.1. The last update may be 1.2.0, released with Cindered Shadows; confirm before building around 1.1.1, and prefer the final version.
+- Target update: 1.1.1 (v262144), decided. It is the latest update the user can dump; 1.2.0 (Cindered Shadows) is not available to them, so build around 1.1.1.
 - Title id: believed to be `010055D009F78000`; confirm from the dump.
 - Graphics API: NVN is expected but unconfirmed.
 - Add-on content (Expansion Pass, Cindered Shadows) needs `aoc:u` and an extra RomFS mount, which TotK did not need.

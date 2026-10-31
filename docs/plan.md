@@ -6,7 +6,7 @@ Answer these from the user's dump before writing any port code. Record answers h
 
 | Question | Answer |
 |---|---|
-| Final update version (1.1.1 or later?) and title ids | |
+| Target update and title ids | Target 1.1.1 (v262144), the latest update the user can obtain; 1.2.0 is not available. Title ids: to confirm from the dump |
 | ExeFS modules and their sizes | |
 | SDK version string in `main` | |
 | Graphics API: NVN, Vulkan or OpenGL imports | |

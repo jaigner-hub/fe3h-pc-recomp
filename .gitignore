@@ -49,3 +49,6 @@ desktop.ini
 .DS_Store
 
 /files/
+
+# Toolchain built from source (tools/build_hactool.py)
+/toolchain/
