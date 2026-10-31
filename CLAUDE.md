@@ -44,7 +44,7 @@ Phase 0, the survey (`docs/plan.md`). No port code exists yet. Next steps:
 ## Open questions
 
 - Target update: 1.1.1 (v262144), decided. It is the latest update the user can dump; 1.2.0 (Cindered Shadows) is not available to them, so build around 1.1.1.
-- Graphics API: NVN, confirmed. The game also links glslc and compiles GLSL at run time; find out how many shaders go that way and whether the rest ship precompiled.
+- Graphics API: NVN, confirmed. Shaders ship precompiled as Maxwell code in KTGL `SPKG` packages, so the TotK shader translator path applies. glslc is linked but no run-time compile has been seen yet; confirm at run time that it stays unused.
 - Add-on content (Expansion Pass, Cindered Shadows) needs `aoc:u` and an extra RomFS mount, which TotK did not need.
 - Game logic may assume 30 fps.
 
