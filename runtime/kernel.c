@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/kernel.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; FE3H's main thread stack size.
+// From totk-pc-recomp runtime/kernel.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; FE3H's main thread stack size; FE3H_THREAD_DUMP.
 // Adapted from MacNativeGames games/totk/runtime/threads.c @ b75be8c (MIT, Copyright (c) 2026 MacNativeGames
 // contributors; itself from d2r-mobile dm/host/hle_thread.c), d2r-mobile dm/host/thread.c @ 53e7c5b (MIT, Copyright
 // (c) 2026 jhaizhou) and LAS Recomp runtime/kernel.c @ da35b83 (MIT, Copyright (c) 2026 Peiikai); the preemption of
@@ -695,8 +695,52 @@ static void dg_sample(RtThread *t) {
 }
 
 
+// ---- FE3H_THREAD_DUMP=<frame>[,<frame>...]: at those presents, every guest thread with its priority, its core, what it
+// waits on and a frame-pointer backtrace of its guest context, to find what a game that stopped making progress waits
+// for. The backtrace reads the thread's Cpu while it is blocked in the host, where lifted code has stored its x29/x30.
+static void thread_dump(uint64_t frame) {
+    static const char *const kinds[] = {"no wait object (running, ready, sleeping or in a host call)", "mutex", "condition variable", "address", "sync objects"};
+    lock();
+    rt_log("threads at frame %llu:", (unsigned long long)frame);
+    for (RtThread *t = g_all; t; t = t->all) {
+        if (!t->started || t->exited) continue;
+        char e[160];
+        rt_logf("thread %#llx prio %d core %d%s: %s on %#llx (key %#llx), entry %s\n", (unsigned long long)t->id, t->prio,
+                t->cur_core, t->is_main ? " main" : "", t->wkind >= 0 && t->wkind <= W_SYNC ? kinds[t->wkind] : "?",
+                (unsigned long long)(t->wkind == W_SYNC ? t->wobj : t->waddr), (unsigned long long)t->wkey,
+                ldr_describe(t->entry, e, sizeof e));
+        if (t->cur && t->cur_core < 0) {
+            const char *h = hostfn_name(t->cur->pc);   // in a host call: pc is that host function's slot
+            char d[160];
+            rt_logf("  pc %s\n", h ? h : ldr_describe(t->cur->pc, d, sizeof d));
+            kern_backtrace(t->cur);
+        }
+    }
+    unlock();
+}
+
+static void thread_dump_frame(uint64_t frame) {
+    static int parsed;
+    static uint64_t at[16];
+    static int n;
+    if (!parsed) {
+        parsed = 1;
+        const char *e = cfg_get("FE3H_THREAD_DUMP");
+        for (char *p = (char *)e; p && *p && n < 16;) {
+            char *end;
+            uint64_t v = strtoull(p, &end, 10);
+            if (end == p) break;
+            at[n++] = v;
+            p = *end == ',' ? end + 1 : end;
+        }
+    }
+    for (int i = 0; i < n; i++)
+        if (at[i] == frame) thread_dump(frame);
+}
+
 // perf_present, every present: a line for a present over 25 ms, the 60-present summary.
 void kern_core_diag_frame(uint64_t frame, uint64_t interval_ns) {
+    thread_dump_frame(frame);
     if (g_ap > 0 && frame && frame % 600 == 0) {   // FE3H_ASYNC_PREEMPT counters since the start
         lock();
         uint64_t v[8] = {g_ap_sent, g_ap_taken, g_ap_host, g_ap_pc, g_ap_deferred, g_ap_fail, g_ap_spin_ok, g_sync36};
