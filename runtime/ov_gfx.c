@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/ov_gfx.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/ov_gfx.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); adds nn::vi SetLayerScalingMode, DestroyLayer, CloseDisplay and Finalize (FE3H).
 // Adapted from MacNativeGames games/totk/runtime/frontend.m (nn::vi, lines 345-359) and gfx_bridge.c (nv, lines
 // 74-86) @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames contributors). The nvnBootstrapLoader stop takes the place
 // of MacNativeGames' NVN entry (third_party/d2r_gfx/gfx/nvn/hle_nvn.c:115-118); no code of it is copied.
@@ -77,6 +77,14 @@ static void ov_open_display(Cpu *c) {
     ret_x(c, 0);
 }
 
+// Result nn::vi::SetLayerScalingMode(Layer *layer, ScalingMode mode). The present scales the game's image to the window
+// itself (gfx_window.c), so the mode is only checked for the layer.
+static void ov_layer_scaling(Cpu *c) { ret_x(c, vi_up() && arg_p(c, 0) == layer ? 0 : VI_R_INVALID); }
+
+// void DestroyLayer(Layer *), void CloseDisplay(Display *), void Finalize(): the one display, layer and window live
+// as long as the process, as the host window does.
+static void ov_vi_release(Cpu *c) { (void)c; }
+
 // Result nn::vi::CreateLayer(Layer **out, Display *display)
 static void ov_create_layer(Cpu *c) {
     void **out = arg_p(c, 0);
@@ -120,6 +128,10 @@ HOST_OVERRIDE("_ZN2nv20SetGraphicsAllocatorEPFPvmmS0_EPFvS0_S0_EPFS0_S0_mS0_ES0_
 HOST_OVERRIDE("_ZN2nv18InitializeGraphicsEPvm", ov_initialize_graphics);
 HOST_OVERRIDE("_ZN2nv28SetGraphicsDevtoolsAllocatorEPFPvmmS0_EPFvS0_S0_EPFS0_S0_mS0_ES0_", ov_devtools_allocator);
 HOST_OVERRIDE("_ZN2nn2vi10InitializeEv", ov_vi_initialize);
+HOST_OVERRIDE("_ZN2nn2vi19SetLayerScalingModeEPNS0_5LayerENS0_11ScalingModeE", ov_layer_scaling);
+HOST_OVERRIDE("_ZN2nn2vi12DestroyLayerEPNS0_5LayerE", ov_vi_release);
+HOST_OVERRIDE("_ZN2nn2vi12CloseDisplayEPNS0_7DisplayE", ov_vi_release);
+HOST_OVERRIDE("_ZN2nn2vi8FinalizeEv", ov_vi_release);
 HOST_OVERRIDE("_ZN2nn2vi18OpenDefaultDisplayEPPNS0_7DisplayE", ov_open_display);
 HOST_OVERRIDE("_ZN2nn2vi11CreateLayerEPPNS0_5LayerEPNS0_7DisplayE", ov_create_layer);
 HOST_OVERRIDE("_ZN2nn2vi15GetNativeWindowEPPvPNS0_5LayerE", ov_native_window);

@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/kernel.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/kernel.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; FE3H's main thread stack size.
 // Adapted from MacNativeGames games/totk/runtime/threads.c @ b75be8c (MIT, Copyright (c) 2026 MacNativeGames
 // contributors; itself from d2r-mobile dm/host/hle_thread.c), d2r-mobile dm/host/thread.c @ 53e7c5b (MIT, Copyright
 // (c) 2026 jhaizhou) and LAS Recomp runtime/kernel.c @ da35b83 (MIT, Copyright (c) 2026 Peiikai); the preemption of
@@ -36,7 +36,7 @@
 #define TLR_SIZE 0x200
 #define THREAD_OBJ_SIZE 0x400            // "current thread object" at TLR+0x1F8 (d2r-mobile thread.c)
 #define TLS_SIZE 0x2000
-#define MAIN_STACK (1ull << 20)          // main.npdm META+0x1C
+#define MAIN_STACK 0x180000ull           // main.npdm META+0x1C (FE3H 1.1.1)
 #define MAIN_PRIO 44                     // META+0xE
 #define MAIN_CORE 0                      // META+0xF
 #define FIBER_MAX 1024

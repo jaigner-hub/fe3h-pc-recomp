@@ -1,14 +1,14 @@
-// From totk-pc-recomp runtime/boot.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/boot.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; FE3H 1.1.1 module list, init_array sizes, main stack, boot checkpoint, and SDK 6.5.0's two-callback nn::init::Start.
 // Adapted from MacNativeGames games/totk/runtime/loader.c (lines 456-477) and services.c (lines 219-235) @ b75be8cf
 // (MIT, Copyright (c) 2026 MacNativeGames contributors) and LAS Recomp runtime/main.c (lines 16-35, 141-159) @
 // da35b83 (MIT, Copyright (c) 2026 Peiikai).
 // The boot driver: the guest main thread runs the game's own nn::init::Start
-// with three host callbacks, the second of which runs DT_INIT of main, subsdk0 and sdk; Start then calls nnMain.
-// --boot checks two checkpoints on the way and ends at the first nvnBootstrapLoader call:
-//   SetFocusHandlingMode   called from main+0xe7a954 (1.4.3: +0xbdb48c) in nnMain, every module's constructor flag
-//                          reads 2
-//   nvnBootstrapLoader     called from main+0xe7eb2c (1.4.3: +0xbe0360) in the graphics bring-up; logs the run
-//                          statistics, exits 0
+// with two host callbacks, the second of which runs DT_INIT of main, subsdk0, subsdk1 and sdk; Start then calls
+// nnMain. --boot ends at the first nvnBootstrapLoader call:
+//   nvnBootstrapLoader     called from main+0x79d570 in the graphics bring-up (FE3H 1.1.1), after every module's
+//                          constructor flag reads 2; logs the run statistics, exits 0
+// TotK also checked nnMain's SetFocusHandlingMode call on the way; FE3H does not import it, so that checkpoint
+// (ov_system.c) never fires here.
 // With --seconds S the run continues past that call; rt_frame_presented ends it once the world clock passed S.
 #include <windows.h>
 #include <stdio.h>
@@ -21,19 +21,20 @@
 #include "nvn_api.h"
 #include "vk.h"
 
-#define SYM_INIT_START "_ZN2nn4init5StartEmmPFvvES2_S2_"
-// main: return addresses of nnMain's SetFocusHandlingMode call (1.2.1 from this port's analysis of main; 1.4.3 from
-// MacNativeGames' scripts/verify_boot.py) and of the first nvnBootstrapLoader call, per game version.
-#define CHECKPOINT_RET (RT_V143 ? 0xbdb48cull : 0xe7a954ull)
-#define NVN_RET (RT_V143 ? 0xbe0360ull : 0xe7eb2cull)
+// nn::init::Start(main thread handle, arguments region, loader_ready, module_inits) in SDK 6.5.0 (sdk+0x28a6e0):
+// _init_libc0, nnosInitialize, loader_ready, _init_libc1, nninitInitializeSdkModule, nninitStartup, _init_libc2,
+// module_inits, nnMain, nninitFinalizeSdkModule, nnosQuickExit. TotK's SDK takes a third callback, module_finis.
+#define SYM_INIT_START "_ZN2nn4init5StartEmmPFvvES2_"
+// main: return address of the first nvnBootstrapLoader call (FE3H 1.1.1, the only bl to its PLT stub). The
+// SetFocusHandlingMode checkpoint keeps TotK 1.2.1's address; FE3H never reaches it.
+#define CHECKPOINT_RET 0xe7a954ull
+#define NVN_RET 0x79d574ull
 #define CTOR_DONE 2                      // a module's constructor flag after its DT_INIT ran the init_array
 
-// The init_array sizes (1.2.1: counted in the modules; 1.4.3: DT_INIT_ARRAYSZ); MacNativeGames' boot check expects
-// the same.
+// The init_array sizes (DT_INIT_ARRAYSZ / 8 of FE3H 1.1.1), in the order the constructors run. TotK ran main, subsdk0,
+// sdk; subsdk1 goes after subsdk0 here.
 typedef struct { const char *name; uint64_t entries; } InitCount;
-static const InitCount inits_121[] = {{"main", 10673}, {"subsdk0", 45}, {"sdk", 116}};
-static const InitCount inits_143[] = {{"main", 10717}, {"subsdk0", 45}, {"sdk", 83}};
-#define expected_inits (RT_V143 ? inits_143 : inits_121)
+static const InitCount expected_inits[] = {{"main", 49}, {"subsdk0", 4}, {"subsdk1", 44}, {"sdk", 105}};
 
 static volatile LONG inits_done, checkpoint_seen;
 uint64_t rt_guest_start_ns;
@@ -49,7 +50,7 @@ static uint32_t ctor_state(const RtLoaded *m) { return LD32(m->ctor_flag); }
 static const char *caller(const Cpu *c, char *buf, int n) { return ldr_describe(c->x[30] - 4, buf, n); }
 
 // main.npdm META: the main thread's priority (+0xE), core (+0xF) and stack size (+0x1C). kernel.c builds the main
-// thread with the 1.2.1 values; a different npdm means a different game build.
+// thread with FE3H 1.1.1's values; a different npdm means a different game build.
 static void check_npdm(void) {
     size_t n;
     uint8_t *npdm = ldr_read_verified(rt_config()->exefs, "main.npdm", &n);
@@ -58,12 +59,12 @@ static void check_npdm(void) {
     memcpy(&stack, npdm + 0x1C, 4);
     int prio = npdm[0xE], core = npdm[0xF];
     free(npdm);
-    if (prio != 44 || core != 0 || stack != 0x100000)
-        rt_fatal("boot: main.npdm asks for priority %d, core %d, stack %#x; kernel.c builds 44, 0, 0x100000", prio,
+    if (prio != 44 || core != 0 || stack != 0x180000)
+        rt_fatal("boot: main.npdm asks for priority %d, core %d, stack %#x; kernel.c builds 44, 0, 0x180000", prio,
                  core, stack);
 }
 
-// ---- the three callbacks of nn::init::Start (rtld's job on hardware)
+// ---- the two callbacks of nn::init::Start (rtld's job on hardware)
 static void cb_loader_ready(Cpu *c) {
     (void)c;
     rt_log("boot: rtld callback: modules linked");
@@ -73,7 +74,7 @@ static void cb_loader_ready(Cpu *c) {
 // afterwards (MacNativeGames loader.c:458-462).
 static void cb_module_inits(Cpu *c) {
     if (InterlockedCompareExchange(&inits_done, 0, 0)) rt_fatal("boot: module constructors requested twice");
-    for (unsigned k = 0; k < sizeof inits_121 / sizeof *inits_121; k++) {
+    for (unsigned k = 0; k < sizeof expected_inits / sizeof *expected_inits; k++) {
         const RtLoaded *m = module_named(expected_inits[k].name);
         uint64_t entries = m->init_array_size / 8;
         if (!m->init) rt_fatal("boot: %s has no DT_INIT", m->name);
@@ -87,11 +88,6 @@ static void cb_module_inits(Cpu *c) {
                      (unsigned long long)expected_inits[k].entries);
     }
     InterlockedExchange(&inits_done, 1);
-}
-
-static void cb_module_finis(Cpu *c) {
-    char lr[128];
-    rt_fatal("boot: the game asked for module finalizers (from %s): the guest exited", caller(c, lr, sizeof lr));
 }
 
 // ---- checkpoints (host.h)
@@ -123,8 +119,7 @@ void rt_boot_event(const char *what, Cpu *c, const char *detail) {
         if (ret != main_mod->base + NVN_RET)
             rt_fatal("boot: first NVN call %s(\"%s\") from %s, expected main+%#llx", "nvnBootstrapLoader", detail, at,
                      (unsigned long long)NVN_RET);
-        if (!InterlockedCompareExchange(&checkpoint_seen, 0, 0))
-            rt_fatal("boot: first NVN call before the SetFocusHandlingMode checkpoint");
+        if (!InterlockedCompareExchange(&inits_done, 0, 0)) rt_fatal("boot: first NVN call before DT_INIT");
         rt_logf("boot: first NVN call nvnBootstrapLoader(\"%s\") from main+%#llx\n", detail,
                (unsigned long long)(ret - main_mod->base));
         if (rt_config()->seconds) return;   // --seconds: the run goes on into the world
@@ -309,7 +304,7 @@ void rt_frame_presented(const tex_t *t, uint64_t n) {
 }
 
 // ---- steps 9-14
-static uint64_t cb_addr[3];
+static uint64_t cb_addr[2];
 
 static void guest_main(Cpu *c) {
     uint32_t handle = kern_main_thread(&c);
@@ -317,8 +312,7 @@ static void guest_main(Cpu *c) {
     if (!start) rt_fatal("boot: %s is not exported", SYM_INIT_START);
     char d[128];
     rt_log("boot: ENTER nn::init::Start at %s, main thread %#x", ldr_describe(start, d, sizeof d), handle);
-    // nn::init::Start(main thread handle, arguments region, loader_ready, module_inits, module_finis)
-    rt_call(c, start, 5, (uint64_t)handle, (uint64_t)0, cb_addr[0], cb_addr[1], cb_addr[2]);
+    rt_call(c, start, 4, (uint64_t)handle, (uint64_t)0, cb_addr[0], cb_addr[1]);
     rt_fatal("boot: nn::init::Start returned");
 }
 
@@ -344,7 +338,6 @@ void rt_boot(void) {
     res_init();
     cb_addr[0] = hostfn_register("<rtld loader_ready>", cb_loader_ready);
     cb_addr[1] = hostfn_register("<rtld module_inits>", cb_module_inits);
-    cb_addr[2] = hostfn_register("<rtld module_finis>", cb_module_finis);
     hostfn_seal();
     ULONGLONG held = GetTickCount64();
     if (warm) WaitForSingleObject(warm, INFINITE), CloseHandle(warm);

@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/fs_host.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/fs_host.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; adds the older SDK calls GetDirectoryEntryCount, CommitSaveData, EnsureSaveData and SetAllocator (FE3H, SDK 6.5.0).
 // Adapted from MacNativeGames games/totk/runtime/fs_host.c @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames
 // contributors); the probe follows MacNativeGames' romfs.c runtime_fs_probe and fs_host.c runtime_save_probe.
 // nn::fs host implementation of the functions main imports. RomFS paths and
@@ -39,7 +39,7 @@ enum { M_FREE, M_SAVE, M_TEMP, M_CACHE, M_SAVE_RO };   // M_SAVE: the working co
 
 typedef struct { int kind; char name[32]; char root[1024]; } Mount;
 typedef struct { HANDLE h; int mode, save; } File;   // h NULL = free; save: on a save-data mount
-typedef struct { HANDLE find; WIN32_FIND_DATAW next; int has_next, mode; } Dir;   // find NULL = free
+typedef struct { HANDLE find; WIN32_FIND_DATAW next; int has_next, mode; wchar_t *pattern; } Dir;   // find NULL = free; pattern: <dir>/* for GetDirectoryEntryCount
 
 static Mount mounts[NMOUNTS];
 static File files[NFILES];
@@ -1003,18 +1003,49 @@ static uint32_t open_directory(uint64_t *out, const char *path, int mode) {
     wchar_t *w = fs_wide(pattern);
     WIN32_FIND_DATAW fd;
     HANDLE f = FindFirstFileW(w, &fd);
-    free(w);
-    if (f == INVALID_HANDLE_VALUE) return win_result(GetLastError());
+    if (f == INVALID_HANDLE_VALUE) {
+        uint32_t e = win_result(GetLastError());
+        free(w);
+        return e;
+    }
     AcquireSRWLockExclusive(&lock);
     for (int i = 0; i < NDIRS; i++)
         if (!dirs[i].find) {
-            dirs[i] = (Dir){f, fd, 1, mode};
+            dirs[i] = (Dir){f, fd, 1, mode, w};
             *out = DIR_BASE + (uint64_t)i;
             ReleaseSRWLockExclusive(&lock);
             return 0;
         }
     ReleaseSRWLockExclusive(&lock);
+    free(w);
     rt_fatal("fs: host directory handle table full (%d)", NDIRS);
+}
+
+// The name filter read_directory applies: not . or .., at most 768 bytes of UTF-8, of the kinds mode asks for.
+static int dir_entry_listed(const WIN32_FIND_DATAW *e, int mode) {
+    if (!wcscmp(e->cFileName, L".") || !wcscmp(e->cFileName, L"..")) return 0;
+    int k = WideCharToMultiByte(CP_UTF8, 0, e->cFileName, -1, NULL, 0, NULL, NULL);
+    if (k <= 0 || k > 769) return 0;
+    return !!(mode & (e->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ? 1 : 2));
+}
+
+// nn::fs::GetDirectoryEntryCount: every entry read_directory would return from a fresh open, whatever the handle has
+// read so far (the SDK counts with a second directory session, so the read position does not move).
+static uint32_t directory_entry_count(int64_t *out, uint64_t h) {
+    if (h < DIR_BASE || h >= DIR_BASE + NDIRS || !out) return FS_R_INVALID_ARGUMENT;
+    AcquireSRWLockShared(&lock);
+    Dir d = dirs[h - DIR_BASE];
+    ReleaseSRWLockShared(&lock);
+    if (!d.find || !d.pattern) return FS_R_INVALID_ARGUMENT;
+    WIN32_FIND_DATAW fd;
+    HANDLE f = FindFirstFileW(d.pattern, &fd);
+    if (f == INVALID_HANDLE_VALUE) return win_result(GetLastError());
+    int64_t n = 0;
+    do n += dir_entry_listed(&fd, d.mode);
+    while (FindNextFileW(f, &fd));
+    FindClose(f);
+    *out = n;
+    return 0;
 }
 
 static uint32_t read_directory(int64_t *count, DirectoryEntry *out, uint64_t h, int64_t max) {
@@ -1026,12 +1057,10 @@ static uint32_t read_directory(int64_t *count, DirectoryEntry *out, uint64_t h, 
         if (!d->has_next && !FindNextFileW(d->find, &d->next)) break;
         d->has_next = 0;
         const WIN32_FIND_DATAW *e = &d->next;
-        if (!wcscmp(e->cFileName, L".") || !wcscmp(e->cFileName, L"..")) continue;
+        if (!dir_entry_listed(e, d->mode)) continue;   // over 768 bytes: nn::fs cannot name it
         char name[800];
         int k = WideCharToMultiByte(CP_UTF8, 0, e->cFileName, -1, name, sizeof name, NULL, NULL);
-        if (k <= 0 || k > 769) continue;   // over 768 bytes: nn::fs cannot name it
         int is_dir = !!(e->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
-        if (!(d->mode & (is_dir ? 1 : 2))) continue;
         memset(&out[n], 0, sizeof *out);
         memcpy(out[n].name, name, (size_t)k);
         out[n].type = is_dir ? FS_ENTRY_DIRECTORY : FS_ENTRY_FILE;
@@ -1047,9 +1076,11 @@ static void close_directory(uint64_t h) {
         rt_fatal("fs: close of invalid directory handle %#llx", (unsigned long long)h);
     AcquireSRWLockExclusive(&lock);
     HANDLE f = dirs[h - DIR_BASE].find;
+    wchar_t *pattern = dirs[h - DIR_BASE].pattern;
     dirs[h - DIR_BASE] = (Dir){0};
     ReleaseSRWLockExclusive(&lock);
     FindClose(f);
+    free(pattern);
 }
 
 // ---- overrides: AAPCS64 thunks. FileHandle, DirectoryHandle, CacheStorageListHandle
@@ -1074,12 +1105,17 @@ static void ov_delete_recursive(Cpu *c) { ret_x(c, delete_recursive(arg_p(c, 0))
 static void ov_open_directory(Cpu *c) { ret_x(c, open_directory(arg_p(c, 0), arg_p(c, 1), I32(2))); }
 static void ov_read_directory(Cpu *c) { ret_x(c, read_directory(arg_p(c, 0), arg_p(c, 1), arg_x(c, 2), I64(3))); }
 static void ov_close_directory(Cpu *c) { close_directory(arg_x(c, 0)); }
+static void ov_directory_entry_count(Cpu *c) { ret_x(c, directory_entry_count(arg_p(c, 0), arg_x(c, 1))); }
 static void ov_mount_save(Cpu *c) { ret_x(c, mount_save(arg_p(c, 0), arg_p(c, 1))); }
 static void ov_mount_save_ro(Cpu *c) { ret_x(c, mount_save_ro(arg_p(c, 0), arg_x(c, 1), arg_p(c, 2))); }
 static void ov_save_exists(Cpu *c) { ret_x(c, save_exists(arg_x(c, 0), arg_p(c, 1))); }
 static void ov_mount_temp(Cpu *c) { ret_x(c, mount_temp(arg_p(c, 0))); }
 static void ov_unmount(Cpu *c) { unmount(arg_p(c, 0)); }
 static void ov_commit(Cpu *c) { ret_x(c, commit(arg_p(c, 0))); }
+// EnsureSaveData(uid): the save's host folder appears with the first mount (mount_save), so there is nothing to make.
+static void ov_ensure_save(Cpu *c) { ret_x(c, 0); }
+// SetAllocator: the allocator nn::fs uses for its own buffers; the host keeps none in guest memory.
+static void ov_set_allocator(Cpu *c) { (void)c; }
 static void ov_create_cache(Cpu *c) { ret_x(c, create_cache(I32(0), I64(1), I64(2))); }
 static void ov_delete_cache(Cpu *c) { ret_x(c, delete_cache(I32(0))); }
 static void ov_mount_cache(Cpu *c) { ret_x(c, mount_cache(arg_p(c, 0), I32(1))); }
@@ -1115,6 +1151,11 @@ static void ov_set_priority(Cpu *c) { (void)c; }
 #define S_MOUNT_TEMP "_ZN2nn2fs21MountTemporaryStorageEPKc"
 #define S_UNMOUNT "_ZN2nn2fs7UnmountEPKc"
 #define S_COMMIT "_ZN2nn2fs6CommitEPKc"
+// Older SDKs (FE3H's 6.5.0): CommitSaveData is Commit by its earlier name.
+#define S_COMMIT_SAVE "_ZN2nn2fs14CommitSaveDataEPKc"
+#define S_ENSURE_SAVE "_ZN2nn2fs14EnsureSaveDataERKNS_7account3UidE"
+#define S_SET_ALLOCATOR "_ZN2nn2fs12SetAllocatorEPFPvmEPFvS1_mE"
+#define S_DIR_ENTRY_COUNT "_ZN2nn2fs22GetDirectoryEntryCountEPlNS0_15DirectoryHandleE"
 #define S_CREATE_CACHE "_ZN2nn2fs18CreateCacheStorageEill"
 #define S_DELETE_CACHE "_ZN2nn2fs18DeleteCacheStorageEi"
 #define S_MOUNT_CACHE "_ZN2nn2fs17MountCacheStorageEPKci"
@@ -1151,6 +1192,10 @@ HOST_OVERRIDE(S_SAVE_EXISTS, ov_save_exists);
 HOST_OVERRIDE(S_MOUNT_TEMP, ov_mount_temp);
 HOST_OVERRIDE(S_UNMOUNT, ov_unmount);
 HOST_OVERRIDE(S_COMMIT, ov_commit);
+HOST_OVERRIDE(S_COMMIT_SAVE, ov_commit);
+HOST_OVERRIDE(S_ENSURE_SAVE, ov_ensure_save);
+HOST_OVERRIDE(S_SET_ALLOCATOR, ov_set_allocator);
+HOST_OVERRIDE(S_DIR_ENTRY_COUNT, ov_directory_entry_count);
 HOST_OVERRIDE(S_CREATE_CACHE, ov_create_cache);
 HOST_OVERRIDE(S_DELETE_CACHE, ov_delete_cache);
 HOST_OVERRIDE(S_MOUNT_CACHE, ov_mount_cache);
