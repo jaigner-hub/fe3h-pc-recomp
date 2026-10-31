@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/gfx_null.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/gfx_null.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // The null graphics back end: no GPU. Every submit completes at
 // once and advances the fence value, pools always initialise, presents are only counted, texel reads return zeros.
 // A submit performs the CPU-visible side effects of its op streams in order: event signals, counter reports (timestamp
@@ -25,7 +25,7 @@ GfxStats gfx_stats(void) {
     return s;
 }
 
-// TOTK_GPU=null|vulkan, default vulkan (rt_config); chosen once.
+// FE3H_GPU=null|vulkan, default vulkan (rt_config); chosen once.
 const GfxBackend *gfx_backend(void) {
     static const GfxBackend *chosen;
     const GfxBackend *b = __atomic_load_n(&chosen, __ATOMIC_ACQUIRE);

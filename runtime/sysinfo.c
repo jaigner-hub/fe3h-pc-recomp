@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/sysinfo.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/sysinfo.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // What a bug report needs about the machine (sysinfo.h). The OS calls sit behind platform.h; the GPU and driver come
 // from the Vulkan device the game renders on.
 #include <stdarg.h>
@@ -54,7 +54,7 @@ static void put(Out *o, const char *fmt, ...) {
 }
 
 static void put_setting(const char *key, const char *value, int from_env, void *ctx) {
-    put(ctx, from_env ? "  TOTK_%s=%s (environment)\n" : "  %s = %s\n", key, value);
+    put(ctx, from_env ? "  FE3H_%s=%s (environment)\n" : "  %s = %s\n", key, value);
 }
 
 int sysinfo_text(char *buf, size_t n) {

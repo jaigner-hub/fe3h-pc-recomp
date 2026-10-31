@@ -1,8 +1,8 @@
-# From totk-pc-recomp tools/gen_nvn_procs.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+# From totk-pc-recomp tools/gen_nvn_procs.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 """Write runtime/nvn_procs.inc: the NVN proc names TotK 1.2.1 loads.
 
 Source names come from the MacNativeGames checkout in refs/ (MIT, Copyright (c) 2026 MacNativeGames contributors):
-NVN/names.txt plus the NVN_EXTRA definitions of totk_nvn_ext.c, minus the two names 1.2.1 does not load. The file
+NVN/names.txt plus the NVN_EXTRA definitions of fe3h_nvn_ext.c, minus the two names 1.2.1 does not load. The file
 list format follows d2r-mobile dm/gfx/tools/gen_protos.py (MIT). No game data is read.
 
 Run with .venv: python tools/gen_nvn_procs.py
@@ -29,7 +29,7 @@ MAIN_COUNT = 534
 
 def main() -> int:
     names = [n.strip() for n in (NVN_DIR / "names.txt").read_text(encoding="utf-8").splitlines() if n.strip()]
-    extras = re.findall(r"^NVN_EXTRA\((\w+)", (NVN_DIR / "totk_nvn_ext.c").read_text(encoding="utf-8"), re.M)
+    extras = re.findall(r"^NVN_EXTRA\((\w+)", (NVN_DIR / "fe3h_nvn_ext.c").read_text(encoding="utf-8"), re.M)
     if len(extras) != 13:
         print(f"expected 13 NVN_EXTRA names, found {len(extras)}", file=sys.stderr)
         return 1

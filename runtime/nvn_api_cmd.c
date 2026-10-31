@@ -1,10 +1,10 @@
-// From totk-pc-recomp runtime/nvn_api_cmd.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/nvn_api_cmd.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // NVN front end, command-buffer slice: command buffers, their memory, recording
 // as op records (nvn_obj.h), recording copies behind command handles, and the submit-time resolution of deferred binds
 // (nvn_submit_prepare, called by nvnQueueSubmitCommands in nvn_api_core.c). Ported from MacNativeGames
 // games/totk/third_party/d2r_gfx/gfx/nvn/hle_nvn.c @ b75be8cf (MIT, Copyright (c) 2026 jhaizhou; origin d2r-mobile),
 // lines 647-1062, 1261-1286, 1486-1760 and 1975-1990, and the *Deferred and memory-callback entry points of
-// totk_nvn_ext.c in the same directory. Metal, mach, the translation thread, Apple diagnostics, the per-frame
+// fe3h_nvn_ext.c in the same directory. Metal, mach, the translation thread, Apple diagnostics, the per-frame
 // statistics and the long-session sweeps (copy marks in control memory, texture pin sweep) dropped.
 //
 // Records are written into a growable host buffer per command buffer, never into the game's command memory: games hand

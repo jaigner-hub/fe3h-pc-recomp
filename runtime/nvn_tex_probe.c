@@ -1,5 +1,5 @@
-// From totk-pc-recomp runtime/nvn_tex_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
-// totk.exe --probe-nvn-tex: texture storage size, block height, alignment and mip offsets of nvn_tex.c.
+// From totk-pc-recomp runtime/nvn_tex_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// fe3h.exe --probe-nvn-tex: texture storage size, block height, alignment and mip offsets of nvn_tex.c.
 // Ported from MacNativeGames games/totk/tests/texture_auto_layout/probe.c @ b75be8cf (MIT, Copyright (c) 2026 jhaizhou).
 // The 40 size and block-height goldens are original-SDK CPU queries for uncompressed and BC3-sRGB boundary cases; no game bytes.
 // The old rounded-up heuristic mismatches 16 of them, including the 160x160 shrine pad. MNG's nvn_bl_offset address checks

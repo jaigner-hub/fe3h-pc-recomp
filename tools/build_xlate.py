@@ -1,18 +1,18 @@
-# From totk-pc-recomp tools/build_xlate.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
-"""Build the shader translator: build/xlate/totk_xlate.exe (Ryujinx 1.3.2 + patches, NativeAOT, SPIR-V for Vulkan).
+# From totk-pc-recomp tools/build_xlate.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+"""Build the shader translator: build/xlate/fe3h_xlate.exe (Ryujinx 1.3.2 + patches, NativeAOT, SPIR-V for Vulkan).
 
 Copies tools/vendor/ryujinx to build/xlate/ryujinx, applies tools/xlate/patches/*.patch there (tools/vendor stays
 byte-identical; 0001-0004 are MNG's, 0005-0009 are ours), then runs `dotnet publish`. Needs the .NET 10 SDK, the MSVC build
 tools and vswhere.exe (docs/building.md). Run with .venv.
 
-Next to the exe it writes totk_xlate.id: the translator identity, a sha256 over everything the build reads (this script,
+Next to the exe it writes fe3h_xlate.id: the translator identity, a sha256 over everything the build reads (this script,
 Program.cs, the csproj, the patches, the vendor tree). runtime/gfx_shader.c puts it into every shader cache key, so a
 translator change re-keys the cache without a hand-made KEY_VERSION bump. --id-only writes it for the exe already built
 (the caller vouches that the exe matches the sources).
 
   python tools/build_xlate.py [--id-only] [--out DIR]
 
---out builds into DIR instead of build/xlate (a task build dir: totk.exe takes the translator next to it).
+--out builds into DIR instead of build/xlate (a task build dir: fe3h.exe takes the translator next to it).
 """
 
 import argparse
@@ -115,7 +115,7 @@ def prepare_sources() -> Path:
 def identity() -> str:
     """sha256 over the translator's inputs, in a fixed order: path and content hash of each file."""
     h = hashlib.sha256()
-    files = [Path(__file__).resolve(), XLATE / "Program.cs", XLATE / "totk_xlate.csproj",
+    files = [Path(__file__).resolve(), XLATE / "Program.cs", XLATE / "fe3h_xlate.csproj",
              *sorted((XLATE / "patches").glob("*.patch"))]
     for f in files:
         h.update(f"{f.name}\0{hashlib.sha256(f.read_bytes()).hexdigest()}\n".encode())
@@ -132,14 +132,14 @@ def write_identity(exe: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--id-only", action="store_true", help="write totk_xlate.id for the exe already built")
+    parser.add_argument("--id-only", action="store_true", help="write fe3h_xlate.id for the exe already built")
     parser.add_argument("--out", type=Path, help="build directory instead of build/xlate")
     a = parser.parse_args()
     if a.out:
         global BUILD
         BUILD = a.out.resolve()
     if a.id_only:
-        write_identity(BUILD / "totk_xlate.exe")
+        write_identity(BUILD / "fe3h_xlate.exe")
         return
     started = time.time()
     dotnet = shutil.which("dotnet")
@@ -155,18 +155,18 @@ def main() -> None:
     work = BUILD / "xlate"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    for name in ("Program.cs", "totk_xlate.csproj"):
+    for name in ("Program.cs", "fe3h_xlate.csproj"):
         shutil.copy2(XLATE / name, work / name)
     out = BUILD / "publish"
     shutil.rmtree(out, ignore_errors=True)
     cmd = [
-        dotnet, "publish", str(work / "totk_xlate.csproj"), "-c", "Release", "-r", "win-x64",
+        dotnet, "publish", str(work / "fe3h_xlate.csproj"), "-c", "Release", "-r", "win-x64",
         "-p:PublishAot=true", "-p:InvariantGlobalization=true", f"-p:RyuSrc={src}", "-o", str(out),
     ]
     if subprocess.run(cmd, env=env).returncode != 0:
         sys.exit("dotnet publish failed")
-    exe = BUILD / "totk_xlate.exe"
-    shutil.copy2(out / "totk_xlate.exe", exe)
+    exe = BUILD / "fe3h_xlate.exe"
+    shutil.copy2(out / "fe3h_xlate.exe", exe)
     write_identity(exe)
     print(f"built {exe} ({exe.stat().st_size / 1e6:.1f} MB) in {time.time() - started:.0f} s")
 

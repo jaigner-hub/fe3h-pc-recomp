@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/swkbd_win.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/swkbd_win.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Adapted from MacNativeGames games/totk/runtime/swkbd_host.c @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames
 // contributors): the ShowKeyboardArg offsets, the UTF-8/UTF-16 conversions, the disabled-key filter and the result codes.
 // The macOS text bar is replaced by a Win32 window.
@@ -16,9 +16,9 @@
 // input (input_block). text_entry_run is the only front-end seam: an overlay (ImGui) can replace it.
 //
 // Environment:
-//   TOTK_SWKBD_ANSWER=<text>|<cancel>|<initial>   answer without a window (probes, scripted runs); <initial> keeps the
+//   FE3H_SWKBD_ANSWER=<text>|<cancel>|<initial>   answer without a window (probes, scripted runs); <initial> keeps the
 //                                                 starting text (the game's, else the default name)
-//   TOTK_SWKBD_TEST=ok|cancel                     open the window, then press OK / Cancel on the first timer tick
+//   FE3H_SWKBD_TEST=ok|cancel                     open the window, then press OK / Cancel on the first timer tick
 #include <windows.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -145,7 +145,7 @@ typedef struct {
     size_t n;
     int result;                          // 0 open, 1 OK, -1 cancelled
     uint64_t armed;                      // buttons seen released since the window opened
-    int test;                            // TOTK_SWKBD_TEST: 1 press OK, -1 press Cancel
+    int test;                            // FE3H_SWKBD_TEST: 1 press OK, -1 press Cancel
 } Entry;
 
 static wchar_t *wide(const char *utf8, wchar_t *buf, int cap) {
@@ -216,7 +216,7 @@ static int text_entry_run(const SwkbdRequest *req, uint16_t *out, size_t cap, si
         rt_fatal("nn::swkbd::ShowKeyboard: RegisterClassEx (error %lu)", GetLastError());
 
     Entry e = {.req = req, .armed = 0};
-    const char *test = cfg_get("TOTK_SWKBD_TEST");
+    const char *test = cfg_get("FE3H_SWKBD_TEST");
     if (test && *test) e.test = !strcmp(test, "cancel") ? -1 : 1;
     // The process is per-monitor DPI aware: the font and the layout below are measured at the game window's DPI, the
     // monitor the dialog opens on, not at the system DPI that plain SystemParametersInfo and AdjustWindowRectEx use.
@@ -340,7 +340,7 @@ static void ov_show_keyboard(Cpu *c) {
     uint16_t u[KB_LIMIT * 2 + 1];
     size_t n = 0;
     int confirmed;
-    const char *forced = cfg_get("TOTK_SWKBD_ANSWER");
+    const char *forced = cfg_get("FE3H_SWKBD_ANSWER");
     int away = kern_core_away();
     AcquireSRWLockExclusive(&one);
     request_from(arg, &req);
@@ -373,7 +373,7 @@ static void ov_show_keyboard(Cpu *c) {
     if (req.password) snprintf(shown, sizeof shown, "(password, %zu units, not logged)", n);
     rt_log("swkbd: from %s: \"%s\" (%d-%d units, disabled keys %#x, %s out, %s start)%s -> %s%s%s",
            ldr_describe(c->x[30] - 4, lr, sizeof lr), prompt, req.min_len, req.max_len, req.disabled,
-           utf8 ? "UTF-8" : "UTF-16", req.game_initial ? "game" : "default", forced && *forced ? " [TOTK_SWKBD_ANSWER]" : "",
+           utf8 ? "UTF-8" : "UTF-16", req.game_initial ? "game" : "default", forced && *forced ? " [FE3H_SWKBD_ANSWER]" : "",
            confirmed ? "\"" : "cancelled", confirmed ? shown : "", confirmed ? "\"" : "");
     ReleaseSRWLockExclusive(&one);
     kern_core_back(&away);

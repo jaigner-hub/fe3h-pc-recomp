@@ -1,21 +1,22 @@
-# From totk-pc-recomp tools/build_game.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
-"""Compile the generated C for one game version and link it with the runtime into build/<version>/totk.exe.
+# From totk-pc-recomp tools/build_game.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h, FE3H version names, expected hashes from the extraction manifest, no zstd, no icon, one profile folder.
+"""Compile the generated C for one game version and link it with the runtime into build/<version>/fe3h.exe.
 
 Writes build/<version>/build.ninja and runs MSYS2 UCRT64 Ninja on it. Ninja keeps the build incremental: a chunk is
 recompiled only when it, a header it includes or its flags change.
 
-    .venv\\Scripts\\python tools\\build_game.py                     # generated/v121 -> build/v121/totk.exe
+    .venv\\Scripts\\python tools\\build_game.py                     # generated/v262144 -> build/v262144/fe3h.exe
     .venv\\Scripts\\python tools\\build_game.py --modules subsdk0   # one module (links if it has no calls into others)
     .venv\\Scripts\\python tools\\build_game.py --jobs 8
-    .venv\\Scripts\\python tools\\build_game.py --out build/v121-t2   # a separate build directory
+    .venv\\Scripts\\python tools\\build_game.py --out build/v262144-t2   # a separate build directory
     .venv\\Scripts\\python tools\\build_game.py --toolchain toolchain/llvm-mingw-<version>/llvm-mingw-<version>-ucrt-x86_64 \\
-        --out build/v121-llvmmingw                                    # llvm-mingw instead of MSYS2 UCRT64
+        --out build/v262144-llvmmingw                                    # llvm-mingw instead of MSYS2 UCRT64
 
 Every runtime/*.c is compiled. build/<version>/modules.c carries the layout, the linked function tables, the
-expected SHA-256 of each ExeFS file (tools/data/expected-<display version>.json) and the default game paths
-(--exefs, --romfs, --profile), which totk.exe uses unless its own command line names others. tools/romfs_index.py
+expected SHA-256 of each ExeFS file (from build/extracted/<version>/extraction-manifest.json, written by
+tools/extract_exefs.py, unless --expected names a file) and the default game paths
+(--exefs, --romfs, --profile), which fe3h.exe uses unless its own command line names others. tools/romfs_index.py
 writes build/<version>/romfs-index.bin and romfs_config.h from the RomFS directory's index.json (runtime/romfs.c reads
-the index next to totk.exe).
+the index next to fe3h.exe).
 
 Private builds reuse the main build's objects. When --out differs from build/<version>, the main build's generated
 objects are up to date (checked with a dry run of its build.ninja) and every header they include from runtime/ is
@@ -43,7 +44,7 @@ from MSYS2. The libraries and headers MSYS2 supplies (Vulkan, SDL3, Opus, libvpx
 (default toolchain/deps-mingw: include/, lib/ with the import libraries and libvpx.a, bin/ with the DLLs), and the C++
 runtime is libc++ from llvm-mingw. Such a build never reuses another build's generated objects.
 
-Split build. --make-runtime-lib compiles only runtime/ into <out>/libtotkrt.a (what CI prebuilds). --runtime-lib PATH
+Split build. --make-runtime-lib compiles only runtime/ into <out>/libfe3hrt.a (what CI prebuilds). --runtime-lib PATH
 then compiles only the generated C and the install-time files (modules.c and INSTALL_SIDE, which bake the player's
 game hashes and version in) and links them with that library. The library holds no game-derived data.
 
@@ -81,27 +82,27 @@ GEN_FLAGS = ['-O1', '-fno-strict-aliasing', '-Wno-return-type', '-Wno-unused-lab
 # Windows 7, which hides the per-monitor DPI functions gfx_window.c and dpi_probe.c call.
 RT_FLAGS = ['-O2', '-g', '-Wall', '-fno-strict-aliasing', '-march=x86-64-v3', '-D_WIN32_WINNT=0x0A00']
 # -Xlinker passes the map path as one argument; -Wl, would split it at any comma in the build dir path
-LINK_FLAGS = ['-fuse-ld=lld', '-Wl,--stack,16777216', '-Xlinker', '"--Map=$builddir/totk.map"']   # the map feeds tools/prof_report.py
-LINK_LIBS = ['-lpsapi', '-lbcrypt', '-lvulkan-1', '-luser32', '-lgdi32', '-ldwmapi', '-lwinmm', '-lSDL3', '-lopus', '-l:libvpx.a', '-l:libzstd.a', '-l:libstdc++.a', '-l:libwinpthread.a']   # Vulkan back end; libvpx static (movies); libzstd static (resolution.c)
+LINK_FLAGS = ['-fuse-ld=lld', '-Wl,--stack,16777216', '-Xlinker', '"--Map=$builddir/fe3h.map"']   # the map feeds tools/prof_report.py
+LINK_LIBS = ['-lpsapi', '-lbcrypt', '-lvulkan-1', '-luser32', '-lgdi32', '-ldwmapi', '-lwinmm', '-lSDL3', '-lopus', '-l:libvpx.a', '-l:libstdc++.a', '-l:libwinpthread.a']   # Vulkan back end; libvpx static (movies)
 VMA_INCLUDE = UCRT.parent / 'include' / 'vma'   # vk_mem_alloc.h; MSYS2 package vulkan-memory-allocator
 # --toolchain: an llvm-mingw tree. The libraries, headers and DLLs MSYS2 supplies come from the deps directory instead.
 LLVM_LINK_LIBS = ['-lpsapi', '-lbcrypt', '-luser32', '-lgdi32', '-ldwmapi', '-lwinmm', '-lvulkan-1', '-lSDL3', '-lopus',
-                  '-l:libvpx.a', '-l:libzstd.a', '-l:libc++.a', '-l:libc++abi.a', '-l:libunwind.a', '-l:libwinpthread.a']
+                  '-l:libvpx.a', '-l:libc++.a', '-l:libc++abi.a', '-l:libunwind.a', '-l:libwinpthread.a']
 DEFAULT_DEPS = ROOT / 'toolchain' / 'deps-mingw'
-# Runtime sources compiled per install, not in the library: romfs.c includes romfs_config.h, patches.c and ov_zstd.c
-# the patches.h of the player's game version (its patch page is the page after that version's main; ov_zstd.c's host
-# functions sit on it).
-INSTALL_SIDE = {'romfs.c', 'patches.c', 'ov_zstd.c'}
-LIB_NAME = 'libtotkrt.a'
+# Runtime sources compiled per install, not in the library: romfs.c includes romfs_config.h, patches.c the patches.h
+# of the player's game version (its patch page is the page after that version's main).
+INSTALL_SIDE = {'romfs.c', 'patches.c'}
+LIB_NAME = 'libfe3hrt.a'
 AR = UCRT / 'llvm-ar.exe'
-WINDRES = UCRT / 'windres.exe'   # runtime/totk.rc: the manifest of totk.exe
+WINDRES = UCRT / 'windres.exe'   # runtime/fe3h.rc: the manifest of fe3h.exe
 TOOLCHAIN_BIN = None   # llvm-mingw bin directory, set by main() for --toolchain
 DEPS = None            # the deps directory of an llvm-mingw build
-# tools/data/expected-<display version>.json for each build version name.
-DISPLAY_VERSIONS = {'v0': '1.0.0', 'v112': '1.1.2', 'v121': '1.2.1', 'v143': '1.4.3'}
+# Display version of each build version name (the update's version number, as extract_exefs.py names the folder).
+DEFAULT_VERSION = 'v262144'
+DISPLAY_VERSIONS = {'v0': '1.0.0', 'v262144': '1.1.1'}
 
 GiB = 1 << 30
-# Peak commit of one compile, 1.2.1 at -O1 (2026-10-20): 120-180 MiB per ~3 MiB chunk, 568 MiB for main_table.c
+# Peak commit of one compile, TotK 1.2.1 at -O1 (2026-10-20): 120-180 MiB per ~3 MiB chunk, 568 MiB for main_table.c
 # (295k-entry tables). 768 MiB leaves headroom for the largest file.
 JOB_MEM = 768 << 20
 MEM_BUDGET = 50 * GiB  # total for all compile jobs
@@ -172,23 +173,6 @@ def write_if_changed(path, text):
     path.write_text(text, encoding='utf-8', newline='\n')   # Ninja and clang read UTF-8; paths may be non-ASCII
 
 
-def copy_romfs_patches(version, out):
-    """totk.exe loads romfs-patches beside romfs-index.bin (runtime/romfs.c overlay_init). tools/make_romfs_patches.py
-    writes them into build/<version> only, so a build in another directory ran without the 60 fps overlay (the quick
-    menus' captured background turned black). Copies them when their manifest differs; romfs-patches-xbox (the same with
-    the A/B and X/Y prompts swapped, pad_layout = xbox_prompts) the same way when it was made."""
-    for name in ('romfs-patches', 'romfs-patches-xbox'):
-        src = ROOT / 'build' / version / name
-        dst = out / name
-        if src.resolve() == dst.resolve() or not (src / 'manifest.tsv').is_file():
-            continue
-        if (dst / 'manifest.tsv').is_file() and (dst / 'manifest.tsv').read_bytes() == (src / 'manifest.tsv').read_bytes():
-            continue
-        shutil.rmtree(dst, ignore_errors=True)
-        shutil.copytree(src, dst)
-        print(f'romfs patches: copied {name} from {src}')
-
-
 def c_string(s):
     return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
@@ -237,7 +221,7 @@ def module_glue(layout, linked, hashes, paths, version):
     out += ['};', f'const int rt_exefs_sha256_count = {len(hashes)};', '']
     for name in ('exefs', 'romfs', 'profile'):
         out.append(f'const char rt_default_{name}[] = {c_string(paths[name].as_posix())};')
-    number = int(DISPLAY_VERSIONS[version].replace('.', '')) if version in DISPLAY_VERSIONS else 0   # 1.4.3 -> 143
+    number = int(DISPLAY_VERSIONS[version].replace('.', '')) if version in DISPLAY_VERSIONS else 0   # 1.1.1 -> 111
     out += [f'const int rt_game_version = {number};', f'const char rt_port_version[] = {c_string(port_version())};', '']
     return '\n'.join(out)
 
@@ -313,15 +297,14 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=False, runtime_lib=
         sources += [out / 'modules.c']
     for src in sources:
         o = runtime_object(out, src)
-        if src.suffix == '.rc':   # windres writes no depfile: the files totk.rc embeds are listed by hand
-            lines.append(f'build {ninja_path(o)}: rc {ninja_path(src)} | {ninja_path(RUNTIME / "totk.manifest")} '
-                         f'{ninja_path(RUNTIME / "totk.ico")}')
+        if src.suffix == '.rc':   # windres writes no depfile: the files fe3h.rc embeds are listed by hand
+            lines.append(f'build {ninja_path(o)}: rc {ninja_path(src)} | {ninja_path(RUNTIME / "fe3h.manifest")}')
         else:
             lines.append(f'build {ninja_path(o)}: cc_rt {ninja_path(src)}')
         rt.append(o)
     objs['runtime'] = rt
     every = [o for v in objs.values() for o in v]
-    exe = out / 'totk.exe'
+    exe = out / 'fe3h.exe'
     if make_lib:
         exe = out / LIB_NAME
         lines += ['', 'rule ar', f'  command = {cmd_arg(AR.as_posix())} rcs $out $in', '  description = AR $out', '', f'build {ninja_path(exe)}: ar ' + ' '.join(ninja_path(o) for o in every),
@@ -330,7 +313,7 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=False, runtime_lib=
     rule = 'link'
     if runtime_lib:
         # Whole archive: the runtime's weak defaults (nvn_procs.c, nvn_api_core.c, vk_sync.c) would otherwise satisfy
-        # references before the linker pulls the members with the strong definitions, which would stay out of totk.exe.
+        # references before the linker pulls the members with the strong definitions, which would stay out of fe3h.exe.
         rule = 'link_lib'
         lines += ['', 'rule link_lib',
                   f'  command = $cc $ldflags @$out.rsp -Wl,--whole-archive {cmd_path(runtime_lib)} -Wl,--no-whole-archive $libs -o $out',
@@ -600,7 +583,7 @@ def mib(n):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--version', default='v121', help='game version (default v121)')
+    ap.add_argument('--version', default=DEFAULT_VERSION, help=f'game version (default {DEFAULT_VERSION}, 1.1.1)')
     ap.add_argument('--gen', type=Path, help='generated C directory (default generated/<version>)')
     ap.add_argument('--out', type=Path, help='build directory (default build/<version>)')
     ap.add_argument('--modules', help='comma-separated subset of the layout modules (default all)')
@@ -613,12 +596,10 @@ def main():
                     help='comma-separated runtime/*.c names to leave out (the link needs another definition of what they '
                          'define)')
     ap.add_argument('--exefs', type=Path,
-                    help="totk.exe's default ExeFS directory (default build/extracted/<version>/exefs)")
-    ap.add_argument('--romfs', type=Path, help="totk.exe's default RomFS directory with romfs.bin and index.json "
+                    help="fe3h.exe's default ExeFS directory (default build/extracted/<version>/exefs)")
+    ap.add_argument('--romfs', type=Path, help="fe3h.exe's default RomFS directory with romfs.bin and index.json "
                                                '(default build/extracted/<version>/romfs)')
-    ap.add_argument('--profile', type=Path, help="totk.exe's default profile directory (default build/profile for v121, "
-                                                 "build/profile-<version> otherwise, so trying another version leaves "
-                                                 "the main profile alone; saves load on 1.2.1 and 1.4.3 alike)")
+    ap.add_argument('--profile', type=Path, help="fe3h.exe's default profile directory (default build/profile)")
     ap.add_argument('--toolchain', type=Path, help='llvm-mingw directory (with bin/clang.exe) to build with instead of '
                                                    'MSYS2 UCRT64 clang')
     ap.add_argument('--ninja', type=Path, help='ninja.exe to build with (default: MSYS2 UCRT64, else bin/ninja.exe of the '
@@ -626,11 +607,12 @@ def main():
     ap.add_argument('--deps', type=Path, help=f'with --toolchain: include/, lib/ and bin/ of Vulkan, SDL3, Opus, libvpx '
                                               f'and VMA (default {DEFAULT_DEPS.relative_to(ROOT).as_posix()})')
     ap.add_argument('--make-runtime-lib', action='store_true',
-                    help=f'build only <out>/{LIB_NAME} from runtime/ (no generated C, no totk.exe)')
+                    help=f'build only <out>/{LIB_NAME} from runtime/ (no generated C, no fe3h.exe)')
     ap.add_argument('--runtime-lib', type=Path, help=f'link against this {LIB_NAME} instead of compiling runtime/ '
                                                     f'({", ".join(sorted(INSTALL_SIDE))} and modules.c still compile)')
     ap.add_argument('--expected', type=Path,
-                    help='expected hashes (default tools/data/expected-<display version>.json)')
+                    help='JSON with {"exefs_sha256": {name: sha256}} (default: the files of '
+                         'build/extracted/<version>/extraction-manifest.json)')
     args = ap.parse_args()
 
     gen = (args.gen or ROOT / 'generated' / args.version).resolve()
@@ -638,14 +620,15 @@ def main():
     extracted = ROOT / 'build' / 'extracted' / args.version
     paths = {'exefs': (args.exefs or extracted / 'exefs').resolve(),
              'romfs': (args.romfs or extracted / 'romfs').resolve(),
-             'profile': (args.profile or ROOT / 'build' / ('profile' if args.version == 'v121'
-                                                           else f'profile-{args.version}')).resolve()}
+             'profile': (args.profile or ROOT / 'build' / 'profile').resolve()}
     expected = args.expected
-    if not expected:
-        if args.version not in DISPLAY_VERSIONS:
-            sys.exit(f'no expected hashes known for {args.version}; pass --expected')
-        expected = ROOT / 'tools' / 'data' / f'expected-v{DISPLAY_VERSIONS[args.version]}.json'
-    hashes = json.loads(Path(expected).read_text())['exefs_sha256']
+    if expected:
+        hashes = json.loads(Path(expected).read_text())['exefs_sha256']
+    else:
+        expected = extracted / 'extraction-manifest.json'
+        if not expected.is_file():
+            sys.exit(f'{expected} not found: run tools/extract_exefs.py for {args.version}, or pass --expected')
+        hashes = {f['name']: f['sha256'] for f in json.loads(expected.read_text())['files']}
     global CLANG, AR, WINDRES, NINJA, TOOLCHAIN_BIN, DEPS
     if args.ninja:
         NINJA = args.ninja.resolve()
@@ -686,8 +669,7 @@ def main():
         print(f'romfs index: {count} files, {mib(size)}, {dt:.1f} s')
     else:
         romfs_index.write_placeholder(out)
-        print(f'build_game: warning: no {paths["romfs"] / "index.json"}; totk.exe will have no RomFS', file=sys.stderr)
-    copy_romfs_patches(args.version, out)
+        print(f'build_game: warning: no {paths["romfs"] / "index.json"}; fe3h.exe will have no RomFS', file=sys.stderr)
     global RUNTIME
     RUNTIME = (args.runtime or RUNTIME).resolve()
     stale = stale_shaders(RUNTIME)
@@ -741,13 +723,13 @@ def main():
     code, dt, peak_one, _ = run_measured(base + [flag_path(exe)], env)
     print(f'link: {dt:.1f} s, peak {mib(peak_one)}')
     if code:
-        print(f'build_game: link failed, {flag_path(exe)} is the old one (a running totk.exe from this dir locks it)',
+        print(f'build_game: link failed, {flag_path(exe)} is the old one (a running fe3h.exe from this dir locks it)',
               file=sys.stderr)
         sys.exit(code)
     if args.make_runtime_lib:
         print(f'{below_root(exe)}: {mib(exe.stat().st_size)}')
         return
-    for dll in dlls:   # dynamic SDL3 (zlib) and its libiconv (LGPL, unmodified DLL), found next to totk.exe
+    for dll in dlls:   # dynamic SDL3 (zlib) and its libiconv (LGPL, unmodified DLL), found next to fe3h.exe
         shutil.copy2(dll, exe.parent / dll.name)
     sections, image = pe_sections(exe)
     print(f'{below_root(exe)}: file {mib(exe.stat().st_size)}, '

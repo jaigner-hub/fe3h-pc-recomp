@@ -1,5 +1,5 @@
-// From totk-pc-recomp runtime/gfx_shader_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
-// --probe-shader: the shader service client (gfx_shader.c) against 32 census shaders. Needs build/xlate/totk_xlate.exe and
+// From totk-pc-recomp runtime/gfx_shader_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// --probe-shader: the shader service client (gfx_shader.c) against 32 census shaders. Needs build/xlate/fe3h_xlate.exe and
 // build/v121/shaders/ (tools/shader_census.py); uses a throwaway cache directory.
 //   1. Translate 32 shaders (mixed stages) through gfx_shader_get; each SPIR-V starts with the magic 0x07230203.
 //   2. Drop the memory cache and ask again: 32 hits from disk, 0 service requests. A third pass returns the same pointers.
@@ -49,7 +49,7 @@ static const char *str_field(const char *from, const char *to, const char *name,
 
 static int hexval(char c) { return c <= '9' ? c - '0' : (c | 32) - 'a' + 10; }
 
-// The repository root: the nearest parent of totk.exe holding build/v121/shaders/jobs.json.
+// The repository root: the nearest parent of fe3h.exe holding build/v121/shaders/jobs.json.
 static int find_root(char *root, size_t n) {
     char exe[MAX_PATH * 2];
     DWORD len = GetModuleFileNameA(NULL, exe, sizeof exe);
@@ -151,8 +151,8 @@ int probe_shader(void) {
     CHECK(count == WANT, "only %d census shaders usable", count);
 
     char dir[MAX_PATH];
-    snprintf(dir, sizeof dir, "%s\\totk-shader-probe-%lu", getenv("TEMP") ? getenv("TEMP") : ".", GetCurrentProcessId());
-    CHECK(_putenv_s("TOTK_SHADER_CACHE", dir) == 0, "cannot set TOTK_SHADER_CACHE");
+    snprintf(dir, sizeof dir, "%s\\fe3h-shader-probe-%lu", getenv("TEMP") ? getenv("TEMP") : ".", GetCurrentProcessId());
+    CHECK(_putenv_s("FE3H_SHADER_CACHE", dir) == 0, "cannot set FE3H_SHADER_CACHE");
 
     // pass 1: translate through the service
     const GfxShader *first[WANT];

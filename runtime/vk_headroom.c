@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_headroom.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/vk_headroom.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // VRAM headroom: the next VMA block of a memory type is allocated on a background thread, not on the render thread.
 //
 // VMA places an allocation in an existing block of its memory type and allocates a new block (vkAllocateMemory, 32 to
@@ -14,7 +14,7 @@
 // Under VRAM pressure no headroom is kept: the spare block counts against the budget that decides whether a pool gets
 // its VRAM mirror (vk_memory.c), so while use plus two blocks passes 85% of the budget the anchor goes and nothing new
 // is allocated.
-// TOTK_VRAM_HEADROOM=0 turns it off.
+// FE3H_VRAM_HEADROOM=0 turns it off.
 #include <windows.h>
 
 #include "cfg.h"
@@ -49,7 +49,7 @@ static void VKAPI_PTR on_allocate(VmaAllocator a, uint32_t type, VkDeviceMemory 
 
 const VmaDeviceMemoryCallbacks *vk_headroom_callbacks(void) {
     static const VmaDeviceMemoryCallbacks cb = {.pfnAllocate = on_allocate};
-    H.on = !cfg_get("TOTK_VRAM_HEADROOM") || cfg_bool("TOTK_VRAM_HEADROOM");
+    H.on = !cfg_get("FE3H_VRAM_HEADROOM") || cfg_bool("FE3H_VRAM_HEADROOM");
     return H.on ? &cb : NULL;
 }
 
@@ -136,5 +136,5 @@ void vk_headroom_start(void) {
     SetThreadPriority(t, THREAD_PRIORITY_BELOW_NORMAL);
     CloseHandle(t);
     rt_log("vk: headroom: the next VMA block of each memory type in use is allocated on a background thread "
-           "(TOTK_VRAM_HEADROOM=0 turns it off)");
+           "(FE3H_VRAM_HEADROOM=0 turns it off)");
 }

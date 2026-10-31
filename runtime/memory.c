@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/memory.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/memory.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Adapted from MacNativeGames games/totk/runtime/services.c and loader.c @ b75be8c (MIT, Copyright (c) 2026
 // MacNativeGames contributors), and LAS Recomp runtime/main.c and platform/windows.c @ da35b83 (MIT, Copyright (c)
 // 2026 Peiikai).
@@ -233,12 +233,12 @@ static void protect(uint64_t a, uint64_t n, DWORD prot, const char *what) {
 // The process is re-run when a region is taken: Windows places DLLs, heaps and thread stacks at random addresses,
 // and a fresh process gets a fresh layout. The parent waits and exits with the child's code.
 static void reexec_or_fail(const char *what) {
-    const char *e = cfg_get("TOTK_REEXEC");
+    const char *e = cfg_get("FE3H_REEXEC");
     int n = e ? atoi(e) : 0;
     if (n >= REEXEC_LIMIT) rt_fatal("memory: %s is not free after %d attempts", what, n);
     char buf[16];
     snprintf(buf, sizeof buf, "%d", n + 1);
-    SetEnvironmentVariableA("TOTK_REEXEC", buf);
+    SetEnvironmentVariableA("FE3H_REEXEC", buf);
     fflush(stdout);
     fflush(stderr);
     STARTUPINFOW si = {.cb = sizeof si};
@@ -276,10 +276,10 @@ void mem_init(void) {
     AddVectoredExceptionHandler(1, thaw_handler);   // before the crash handler
     alias_pages = VirtualAlloc(NULL, ALIAS_PAGES, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     if (!alias_pages) rt_fatal("memory: cannot allocate the alias page map");
-    // totk.ini is read here, once the address space is claimed and before the first setting: the pool size below
-    // depends on TOTK_APP_POOL and on the resolution settings (resolution.c decides them once, on this first call).
+    // fe3h.ini is read here, once the address space is claimed and before the first setting: the pool size below
+    // depends on FE3H_APP_POOL and on the resolution settings (resolution.c decides them once, on this first call).
     cfg_init();
-    const char *pool = cfg_get("TOTK_APP_POOL");
+    const char *pool = cfg_get("FE3H_APP_POOL");
     L = (RtGuestLayout){
         .aslr = {low, RT_ADDRESS_LIMIT - low},
         .stack = {low + STACK_OFF, STACK_SIZE},
@@ -289,7 +289,7 @@ void mem_init(void) {
         .hostfn = {RT_HOSTFN_BASE, RT_HOSTFN_SIZE},
         .pool = pool ? strtoull(pool, NULL, 0) : DEFAULT_POOL + res_heap_extra_bytes(),   // resolution.c
     };
-    if (!L.pool) rt_fatal("memory: TOTK_APP_POOL is 0");
+    if (!L.pool) rt_fatal("memory: FE3H_APP_POOL is 0");
 }
 
 const RtGuestLayout *mem_layout(void) { return &L; }

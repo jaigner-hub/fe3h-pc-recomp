@@ -1,7 +1,7 @@
-// From totk-pc-recomp runtime/ui/binds_page.cpp @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
-// The remapping rows of the Controls tab (binds_page.h): edits a copy of the input tables (input_map.h), writes the TOTK_BIND_* lines that
-// give the copy, and input_win.c applies them at its next poll; totk.ini follows a moment later (opt_save_soon). The
-// gamepad cells show and change the table of the button layout in use (TOTK_PAD_LAYOUT).
+// From totk-pc-recomp runtime/ui/binds_page.cpp @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// The remapping rows of the Controls tab (binds_page.h): edits a copy of the input tables (input_map.h), writes the FE3H_BIND_* lines that
+// give the copy, and input_win.c applies them at its next poll; fe3h.ini follows a moment later (opt_save_soon). The
+// gamepad cells show and change the table of the button layout in use (FE3H_PAD_LAYOUT).
 #include <stdio.h>
 #include <string.h>
 
@@ -63,7 +63,7 @@ static void utf8(uint32_t c, char *out, size_t n) {
 }
 
 // A key as the player sees it: its catalog name, the numpad format, the character on a punctuation key in the keyboard
-// layout in use, else its totk.ini name in capitals (letters, digits, F keys).
+// layout in use, else its fe3h.ini name in capitals (letters, digits, F keys).
 static const char *key_label(int k, char *buf, size_t n) {
     if (k == KEY_NONE) return "";
     if (k >= KEY_SPACE && k <= KEY_PAGEDOWN) return menu_text((UiTextId)(UI_KEY_SPACE + (k - KEY_SPACE)));
@@ -104,14 +104,14 @@ static const char *pad_label(int p) {
 // The layout the gamepad cells show: the one in effect, or without a gamepad the one the setting names (Xbox for auto).
 static int shown_layout(void) {
     int l = input_pad_layout();
-    return l >= 0 ? l : input_pad_layout_pick(cfg_value("TOTK_PAD_LAYOUT"), 0);
+    return l >= 0 ? l : input_pad_layout_pick(cfg_value("FE3H_PAD_LAYOUT"), 0);
 }
 
 // Writes the bind_ line of every action whose line for m differs from the one set; a line at the defaults goes away.
 static void write_lines(const InputMap *m) {
     for (int a = 0; a < ACTION_COUNT; a++) {
         char var[40], line[256];
-        snprintf(var, sizeof var, "TOTK_BIND_%s", input_action_name(a));
+        snprintf(var, sizeof var, "FE3H_BIND_%s", input_action_name(a));
         input_map_line(m, a, line, sizeof line);
         const char *now = cfg_get(var);
         if (!strcmp(line, now ? now : "")) continue;

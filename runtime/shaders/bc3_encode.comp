@@ -1,6 +1,6 @@
-// From totk-pc-recomp runtime/shaders/bc3_encode.comp @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/shaders/bc3_encode.comp @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // RGBA8 texels to BC3 blocks on the GPU, one invocation per 4x4 block: the second pass of the ASTC decode when
-// TOTK_ASTC_BC is on (vk_astc.c), so a decoded ASTC texture takes 8 bits per texel in video memory instead of 32.
+// FE3H_ASTC_BC is on (vk_astc.c), so a decoded ASTC texture takes 8 bits per texel in video memory instead of 32.
 // Texels past the right or bottom edge repeat the last column or row.
 //
 // Colour: the BC1 four-colour block of the box around the block's colours, its diagonal turned to the sign of the

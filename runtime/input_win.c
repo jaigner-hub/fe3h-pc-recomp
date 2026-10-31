@@ -1,7 +1,7 @@
-// From totk-pc-recomp runtime/input_win.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/input_win.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Host input for nn::hid (runtime/ov_input.c): an SDL3 gamepad (no SDL window, no SDL video), the keyboard and the mouse,
 // merged into Switch npad button bits and stick axes. Button order follows libnx HidNpadButton (ISC). The key and pad bindings
-// are the tables in input_map.c (totk.ini overrides them); this file translates Win32 virtual keys to its key ids, reads the mouse (raw input, WM_INPUT)
+// are the tables in input_map.c (fe3h.ini overrides them); this file translates Win32 virtual keys to its key ids, reads the mouse (raw input, WM_INPUT)
 // and owns the cursor capture. Keys and their map: docs/controls.md.
 // The gamepad also rumbles (input_rumble) and, when it has a gyro and an accelerometer, feeds the six-axis sensor from a
 // thread of its own (input_motion_start). Every SDL call on the gamepad is made under `lock`.
@@ -28,13 +28,13 @@ static SDL_Gamepad *pad;
 static uint64_t next_scan;
 static int pad_rumble;               // the open gamepad has rumble motors
 static volatile LONG pad_labels[4];  // ... and the labels of its south, east, west, north buttons (PAD_LABEL_*), any thread
-static int pad_east_a;               // ... and labels its east face button A (Nintendo layout under TOTK_PAD_LAYOUT=auto)
+static int pad_east_a;               // ... and labels its east face button A (Nintendo layout under FE3H_PAD_LAYOUT=auto)
 static int pad_layout = -1;          // PAD_LAYOUT_* in effect for the open gamepad, -1 to pick again; live (cfg_version)
 static unsigned pad_layout_seen;
 static volatile LONG pad_layout_shown = -1;   // pad_layout for the menu (any thread), -1 without a gamepad
 static SDL_JoystickID sensor_pad;    // the gamepad whose sensors the motion thread set up, 0 none
 static int sensor_ok;                // ... and it has both sensors, enabled
-static int motion_thread;            // 0 not started, 1 running, -1 off (TOTK_MOTION=0, no SDL)
+static int motion_thread;            // 0 not started, 1 running, -1 off (FE3H_MOTION=0, no SDL)
 
 // SDL buttons of the gamepad inputs (input_map.h PAD_*), by position; PAD_ZL and PAD_ZR are the triggers (axes).
 static const SDL_GamepadButton pad_sdl[PAD_COUNT] = {
@@ -48,7 +48,7 @@ static const SDL_GamepadButton pad_sdl[PAD_COUNT] = {
     [PAD_LPADDLE2] = SDL_GAMEPAD_BUTTON_LEFT_PADDLE2, [PAD_RPADDLE2] = SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2,
 };
 
-// TOTK_INPUT_SCRIPT=<file>: lines "<frame> <button> [hold]" or "<frame> LSTICK|RSTICK <x> <y> [hold]", ORed into the real input.
+// FE3H_INPUT_SCRIPT=<file>: lines "<frame> <button> [hold]" or "<frame> LSTICK|RSTICK <x> <y> [hold]", ORed into the real input.
 // <frame> and its hold are 60 Hz ticks of game time since the first present (frame_step_ticks: presents at 60 fps), so
 // the title menus get the presses at the same game time at any frame limit. A line "@<ms> ..." is timed instead: <ms>
 // and its hold are milliseconds of the world clock (frame_step_world_us, game time since the loaded save's first
@@ -67,10 +67,10 @@ static int script_mixed;             // the script has timed lines: its untimed 
 
 static void script_load(void) {
     script_state = 1;
-    const char *path = cfg_get("TOTK_INPUT_SCRIPT");
+    const char *path = cfg_get("FE3H_INPUT_SCRIPT");
     if (!path || !*path) return;
     FILE *f = fopen(path, "r");
-    if (!f) { rt_log("input: cannot open TOTK_INPUT_SCRIPT %s", path); return; }
+    if (!f) { rt_log("input: cannot open FE3H_INPUT_SCRIPT %s", path); return; }
     char line[256];
     int cap = 0, ln = 0;
     while (fgets(line, sizeof line, f)) {
@@ -131,7 +131,7 @@ static void script_apply(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     }
 }
 
-// TOTK_INPUT_RECORD=<file>: writes the merged input as TOTK_INPUT_SCRIPT lines, one per button press and per stick
+// FE3H_INPUT_RECORD=<file>: writes the merged input as FE3H_INPUT_SCRIPT lines, one per button press and per stick
 // segment, so a played session replays as a script. A stick segment ends when an axis moves by more than REC_STICK_STEP.
 // An event that begins on the world clock is written timed ("@<ms>", hold in ms), one before it in ticks
 // (frame_step_ticks). When the world clock starts, held buttons and sticks are cut there and go on as timed events.
@@ -174,11 +174,11 @@ static void rec_flush_all(void) {
 
 static void rec_apply(uint64_t b, const int32_t sl[2], const int32_t sr[2]) {
     if (!rec_state) {
-        const char *path = cfg_get("TOTK_INPUT_RECORD");   // no default: not recording when unset
+        const char *path = cfg_get("FE3H_INPUT_RECORD");   // no default: not recording when unset
         rec = path && *path ? fopen(path, "w") : NULL;
         rec_state = rec ? 1 : -1;
-        if (path && *path && !rec) rt_log("input: cannot open TOTK_INPUT_RECORD %s", path);
-        if (rec) { fprintf(rec, "# Recorded input (TOTK_INPUT_RECORD); frame = 60 Hz ticks of game time, @ms = world clock.\n"); atexit(rec_flush_all);
+        if (path && *path && !rec) rt_log("input: cannot open FE3H_INPUT_RECORD %s", path);
+        if (rec) { fprintf(rec, "# Recorded input (FE3H_INPUT_RECORD); frame = 60 Hz ticks of game time, @ms = world clock.\n"); atexit(rec_flush_all);
                    rt_log("input: recording to %s", path); }
     }
     if (rec_state != 1) return;
@@ -305,14 +305,14 @@ static volatile LONG cur_suspend;          // F11 or a modal size or move loop u
 static SRWLOCK cur_lock = SRWLOCK_INIT;    // serialises cursor_update (window thread, input_block callers)
 static volatile LONG g_block;              // text entry state, see input_block
 static volatile LONG g_menu;               // in-game menu state, see input_menu
-static float mouse_sens = -1;              // TOTK_MOUSE_SENS, 0 = mouse camera off; live (cfg_version)
+static float mouse_sens = -1;              // FE3H_MOUSE_SENS, 0 = mouse camera off; live (cfg_version)
 static unsigned mouse_sens_seen;
 
 static float mouse_sens_get(void) {
     unsigned ver = cfg_version();
     if (mouse_sens >= 0 && ver == mouse_sens_seen) return mouse_sens;
     mouse_sens_seen = ver;
-    double v = cfg_double("TOTK_MOUSE_SENS");
+    double v = cfg_double("FE3H_MOUSE_SENS");
     mouse_sens = (float)(v < 0 ? 0 : v > 10 ? 10 : v);
     return mouse_sens;
 }
@@ -320,7 +320,7 @@ static float mouse_sens_get(void) {
 // Hide the cursor and confine it to the client area while the window is focused, not suspended, not behind a text entry
 // or the menu, and the mouse camera is on; release it otherwise. Safe from any thread.
 static void cursor_update(HWND h) {
-    const char *in = cfg_get("TOTK_INPUT");
+    const char *in = cfg_get("FE3H_INPUT");
     AcquireSRWLockExclusive(&cur_lock);
     int want = h && cur_active && !(cur_rel & CUR_REL) && !cur_suspend && g_block != 1 && g_menu != 1 && mouse_sens_get() > 0 &&
                !(in && !strcmp(in, "none")) && GetForegroundWindow() == h && !IsIconic(h);
@@ -431,14 +431,14 @@ static void mouse_camera(int32_t out[2]) {
     out[1] = held[1];
 }
 
-static float stick_dead = -1;              // TOTK_STICK_DEADZONE as a fraction of full deflection; live (cfg_version)
+static float stick_dead = -1;              // FE3H_STICK_DEADZONE as a fraction of full deflection; live (cfg_version)
 static unsigned stick_dead_seen;
 
 static float stick_dead_get(void) {
     unsigned ver = cfg_version();
     if (stick_dead >= 0 && ver == stick_dead_seen) return stick_dead;
     stick_dead_seen = ver;
-    double v = cfg_double("TOTK_STICK_DEADZONE");
+    double v = cfg_double("FE3H_STICK_DEADZONE");
     stick_dead = (float)(v < 0 ? 0 : v > 50 ? 50 : v) / 100.f;
     return stick_dead;
 }
@@ -488,7 +488,7 @@ static int pad_layout_get(void) {
     if (pad_layout >= 0 && ver == pad_layout_seen) return pad_layout;
     pad_layout_seen = ver;
     int was = pad_layout;
-    const char *set = cfg_value("TOTK_PAD_LAYOUT");
+    const char *set = cfg_value("FE3H_PAD_LAYOUT");
     pad_layout = input_pad_layout_pick(set, pad_east_a);
     if (pad_layout != was)
         rt_log("input: gamepad layout %s (pad_layout = %s)", pad_layout == PAD_LAYOUT_XBOX ? "xbox" : "nintendo", set);
@@ -496,7 +496,7 @@ static int pad_layout_get(void) {
     return pad_layout;
 }
 
-// The TOTK_BIND_* values last applied, one per line; the tables are built again when one changes (the menu's remapping rows write
+// The FE3H_BIND_* values last applied, one per line; the tables are built again when one changes (the menu's remapping rows write
 // them while the game runs). Under lock.
 static unsigned binds_seen = ~0u;
 static char binds_applied[4096];
@@ -509,7 +509,7 @@ static void binds_refresh(void) {
     size_t len = 0;
     for (int a = 0; a < ACTION_COUNT; a++) {
         char var[32];
-        snprintf(var, sizeof var, "TOTK_BIND_%s", input_action_name(a));
+        snprintf(var, sizeof var, "FE3H_BIND_%s", input_action_name(a));
         const char *s = cfg_get(var);
         len += (size_t)snprintf(now + len, len < sizeof now ? sizeof now - len : 0, "%s\n", s ? s : "");
     }
@@ -518,16 +518,16 @@ static void binds_refresh(void) {
     input_map_configure();
 }
 
-// TOTK_TEST_PAD=<lx>,<ly>,<rx>,<ry> (test runs): an SDL virtual gamepad whose sticks rest at these raw SDL axis values
+// FE3H_TEST_PAD=<lx>,<ly>,<rx>,<ry> (test runs): an SDL virtual gamepad whose sticks rest at these raw SDL axis values
 // (-32768..32767, down is +y), attached before the first scan so it is the gamepad the game reads: drift and full
 // deflection go through the same mapping and dead zone as a real pad.
 static void test_pad_attach(void) {
     static SDL_Joystick *joy;   // kept open: a virtual joystick's axes are set through an open handle
-    const char *e = cfg_get("TOTK_TEST_PAD");
+    const char *e = cfg_get("FE3H_TEST_PAD");
     int v[4];
     if (!e || !*e) return;
     if (sscanf(e, "%d,%d,%d,%d", &v[0], &v[1], &v[2], &v[3]) != 4) {
-        rt_log("input: TOTK_TEST_PAD=%s is not <lx>,<ly>,<rx>,<ry>; no test gamepad", e);
+        rt_log("input: FE3H_TEST_PAD=%s is not <lx>,<ly>,<rx>,<ry>; no test gamepad", e);
         return;
     }
     SDL_VirtualJoystickDesc d;
@@ -551,8 +551,8 @@ static void test_pad_attach(void) {
 
 static void start(void) {
     binds_refresh();
-    const char *e = cfg_get("TOTK_INPUT");
-    if (e && !strcmp(e, "none")) { state = -1; rt_log("input: disabled (TOTK_INPUT=none)"); return; }
+    const char *e = cfg_get("FE3H_INPUT");
+    if (e && !strcmp(e, "none")) { state = -1; rt_log("input: disabled (FE3H_INPUT=none)"); return; }
     if (!SDL_Init(SDL_INIT_GAMEPAD)) { state = -1; rt_log("input: SDL gamepad init failed (%s), keyboard only", SDL_GetError()); }
     else state = 1;
     if (state == 1) test_pad_attach();
@@ -587,7 +587,7 @@ static int pad_physical(uint8_t pd[PAD_COUNT]) {
     return 1;
 }
 
-// Under lock, state 1: the open gamepad's buttons (Switch bits after TOTK_PAD_LAYOUT and the TOTK_BIND_* lines) and
+// Under lock, state 1: the open gamepad's buttons (Switch bits after FE3H_PAD_LAYOUT and the FE3H_BIND_* lines) and
 // sticks; 0 without a connected gamepad.
 static int pad_read(uint64_t *b, int32_t sl[2], int32_t sr[2]) {
     uint8_t pd[PAD_COUNT] = {0};
@@ -745,7 +745,7 @@ int input_capture(int reset, int *id) {
 }
 
 int input_rumble_triggers_enabled(void) {
-    return cfg_bool("TOTK_RUMBLE_TRIGGERS");
+    return cfg_bool("FE3H_RUMBLE_TRIGGERS");
 }
 
 int input_rumble(uint16_t low, uint16_t high, uint32_t ms) {
@@ -802,13 +802,13 @@ int input_motion_enabled(void) {
     unsigned v = cfg_version();
     if (on < 0 || v != seen) {
         seen = v;
-        on = cfg_bool("TOTK_MOTION");
+        on = cfg_bool("FE3H_MOTION");
     }
     return on;
 }
 
 // 250 Hz: the gamepads update (reports read, rumble expiry) and the newest gyro and accelerometer sample goes into the
-// fusion. Without a gamepad with sensors, or with motion off (TOTK_MOTION=0, live), nothing is fed and the six-axis
+// fusion. Without a gamepad with sensors, or with motion off (FE3H_MOTION=0, live), nothing is fed and the six-axis
 // sensor reads at rest.
 static DWORD WINAPI motion_main(void *arg) {
     (void)arg;
@@ -840,7 +840,7 @@ void input_motion_start(void) {
     AcquireSRWLockExclusive(&lock);
     if (!state) start();
     if (!motion_thread) {
-        if (!input_motion_enabled()) rt_log("input: motion off (TOTK_MOTION=0); it can be turned on while the game runs");
+        if (!input_motion_enabled()) rt_log("input: motion off (FE3H_MOTION=0); it can be turned on while the game runs");
         if (state != 1) motion_thread = -1;
         else {
             HANDLE h = CreateThread(NULL, 0, motion_main, NULL, 0, NULL);

@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/perfmon.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/perfmon.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Performance overlay numbers (runtime/perfmon.c): the game's frame rate and frame times, the render thread's waits
 // from the perf counters, and the machine's CPU, memory and GPU load and temperatures. A value the machine does not give
 // is negative.
@@ -34,7 +34,7 @@ typedef struct {
     float replay_ms, gpu_ms, pipe_wait_ms, xlate_ms, tex_ms, tex_uploads;
 } PerfStats;
 
-// Overlay mode 0 off, 1 fps, 2 full (TOTK_PERF_OVERLAY), from the present path when the setting changes. Full starts
+// Overlay mode 0 off, 1 fps, 2 full (FE3H_PERF_OVERLAY), from the present path when the setting changes. Full starts
 // the machine sampling thread (twice a second) and turns on the event counts and GPU timestamps; leaving full stops
 // them. Off: perf_present skips perfmon_frame and nothing samples.
 void perfmon_mode(int mode);

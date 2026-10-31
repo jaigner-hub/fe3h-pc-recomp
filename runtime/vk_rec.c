@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_rec.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/vk_rec.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // The recorder thread: see vk_rec.h. One producer (the submitting thread, between rec_begin and rec_end) and one
 // consumer (the recorder) share a ring of 64-bit words. A packet is a header word (op, length in words) and the
 // call's arguments; its pointers point into the packet itself, so the recorder passes the payload to the driver as
@@ -131,13 +131,13 @@ void rec_begin(VkCommandBuffer cb) {
     static int mode = -1;
     if (mode < 0) {
         // Default off on AMD GPUs: with the recorder their drivers lost the device within the first frames or at menu
-        // opens, 1 boot in 3 on an RX 9070 XT, and TOTK_VK_RECORDER=0 ended it for three users (issue #5); under RADV
+        // opens, 1 boot in 3 on an RX 9070 XT, and FE3H_VK_RECORDER=0 ended it for three users (issue #5); under RADV
         // the kernel saw an illegal opcode at the end of a command buffer (issue #40). Letting the recorder end its own
         // parts (rec_end_cb) fixed the white scene on an RX 6700 XT; the default stays off until more AMD cards run it.
-        const char *set = cfg_get("TOTK_VK_RECORDER");
+        const char *set = cfg_get("FE3H_VK_RECORDER");
         mode = rt_knob("VK_RECORDER", vk_caps.amd ? "0" : "1");
         if (!mode && vk_caps.amd && !(set && *set))
-            rt_log("vk_rec: no recorder thread on AMD GPUs (TOTK_VK_RECORDER=1 turns it on)");
+            rt_log("vk_rec: no recorder thread on AMD GPUs (FE3H_VK_RECORDER=1 turns it on)");
         if (mode) {
             wake_ev = CreateEventA(NULL, FALSE, FALSE, NULL);
             rec_thread = wake_ev ? CreateThread(NULL, 0, rec_main, NULL, 0, NULL) : NULL;
@@ -147,7 +147,7 @@ void rec_begin(VkCommandBuffer cb) {
             } else {
                 SetThreadPriority(rec_thread, GetThreadPriority(GetCurrentThread()));
                 rt_log("vk_rec: the replay's Vulkan commands are made by a recorder thread%s",
-                       mode == 2 ? " in the B blocks (TOTK_AB)" : "");
+                       mode == 2 ? " in the B blocks (FE3H_AB)" : "");
             }
         }
     }
@@ -164,17 +164,17 @@ void rec_end(void) {
     rec_live = 0;
 }
 
-// TOTK_REC_END (default 1): the thread that recorded the part also ends it, after the breadcrumb crumb (kind 0: none)
+// FE3H_REC_END (default 1): the thread that recorded the part also ends it, after the breadcrumb crumb (kind 0: none)
 // that vk_sync.c writes at the end of a submission. On an RX 6700 XT (driver 26.10.1, issue #5) parts the recorder
 // recorded and the submitting thread ended broke when a submission was split (vk_sync.c vk_sync_split): the GPU hung
 // or the scene turned green, then white. The handoff in rec_drain orders the two threads, so Vulkan allows the old
-// split; the driver did not cope with it. TOTK_REC_END=0 brings the old split back.
+// split; the driver did not cope with it. FE3H_REC_END=0 brings the old split back.
 typedef struct { int kind; uint64_t n; } A_EndCb;
 int rec_end_cb(VkCommandBuffer cb, int crumb, uint64_t n) {
     static int mode = -1;
     if (mode < 0) {
         mode = rt_knob("REC_END", "1");
-        rt_log("vk_rec: a part the recorder records is ended by %s (TOTK_REC_END=%d)",
+        rt_log("vk_rec: a part the recorder records is ended by %s (FE3H_REC_END=%d)",
                mode ? "the recorder" : "the submitting thread", mode);
     }
     if (!rec_live || cb != rec_cb || !mode) {

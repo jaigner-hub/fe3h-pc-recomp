@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/ov_movie.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/ov_movie.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Adapted from MacNativeGames games/totk/runtime/movie_host.c @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames
 // contributors).
 // movie::Decoder for VP9 on the host with libvpx (BSD-3-Clause, linked statically).
@@ -22,7 +22,7 @@
 // decoded frames are handed over when their presentation time is due, counted from the first frame (movie_tick, at every
 // present on the presenting guest thread), at most one per present. When the game falls behind, a frame more than 1.5
 // periods late is dropped if the next one is due too, so the picture keeps time with the movie's sound.
-// TOTK_MOVIE_PACE=0 hands every decoded frame over at the next present; TOTK_MOVIE_HOST=0 leaves every decoder to the
+// FE3H_MOVIE_PACE=0 hands every decoded frame over at the next present; FE3H_MOVIE_HOST=0 leaves every decoder to the
 // library (which aborts at the first movie).
 #include <windows.h>
 #include <emmintrin.h>
@@ -95,7 +95,7 @@ void movie_set_clock(uint64_t (*clock)(void)) { g_clock = clock ? clock : kern_n
 void movie_set_pace(int on) { g_pace = on; }
 static int pace_on(void) {
     if (g_pace < 0) {
-        const char *e = cfg_get("TOTK_MOVIE_PACE");
+        const char *e = cfg_get("FE3H_MOVIE_PACE");
         g_pace = !(e && !strcmp(e, "0"));
     }
     return g_pace;
@@ -103,7 +103,7 @@ static int pace_on(void) {
 static int host_off(void) {
     static int v = -1;
     if (v < 0) {
-        const char *e = cfg_get("TOTK_MOVIE_HOST");
+        const char *e = cfg_get("FE3H_MOVIE_HOST");
         v = e && !strcmp(e, "0");
     }
     return v;
@@ -442,7 +442,7 @@ static void ov_ctor(Cpu *c) {
     guest_init();
     if (type != MOVIE_TYPE_VP9 || mode != MOVIE_MODE_BUFFER || host_off()) {
         rt_log("movie: decoder type %d mode %d format %d left to the library%s", type, mode, format,
-               host_off() ? " (TOTK_MOVIE_HOST=0)" : " (only VP9 in buffer mode runs on the host)");
+               host_off() ? " (FE3H_MOVIE_HOST=0)" : " (only VP9 in buffer mode runs on the host)");
         pass(c, MOVIE_CTOR);
         return;
     }

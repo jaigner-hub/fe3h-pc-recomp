@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/ui_text.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/ui_text.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Catalog of the text the host shows the player (ui_text.h). One array per catalog language, indexed by UiTextId: a new
 // string gets an id in ui_text.h and an entry in every language that has one (a missing entry falls back to English).
 // The software keyboard has every language; the menu has English and Russian.
@@ -544,10 +544,10 @@ const char *ui_text_in(const char *lang, UiTextId id) {
 
 const char *ui_text(UiTextId id) { return ui_text_in(ui_text_lang(ov_language()), id); }
 
-// The menu language, re-read when cfg_version changes. TOTK_MENU_LANG "ru" or "en"; anything else (unset included)
+// The menu language, re-read when cfg_version changes. FE3H_MENU_LANG "ru" or "en"; anything else (unset included)
 // follows the system UI language: Russian for "ru", "ru-RU", ..., else English.
 static const char *resolve_menu_lang(void) {
-    const char *v = cfg_value("TOTK_MENU_LANG");
+    const char *v = cfg_value("FE3H_MENU_LANG");
     if (v && !strcmp(v, "ru")) return "ru";
     if (v && !strcmp(v, "en")) return "en";
     const char *sys = plat_ui_language();

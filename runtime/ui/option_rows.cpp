@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/ui/option_rows.cpp @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/ui/option_rows.cpp @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Two-pane settings pages (option_rows.h): rows on the left, the selected or hovered row's description on the right.
 //
 // Adapted from SavageWindRecomp's runtime/ui/option_rows.mm (https://github.com/Revivedx/SavageWindRecomp @
@@ -199,14 +199,14 @@ static int row(const char *key, UiTextId label, UiTextId desc, const RowView &v)
     return off ? 0 : step;
 }
 
-// ---- writing a setting: at once in memory (live settings follow), to totk.ini a moment later (opt_save_tick)
+// ---- writing a setting: at once in memory (live settings follow), to fe3h.ini a moment later (opt_save_tick)
 static uint64_t g_save_at;   // plat_now_ns deadline of the pending write; 0 none
 static bool g_save_logged;
 
 static void apply(const char *key, const char *value) {
     if (*value) {
         cfg_set(key, value);
-    } else {   // the automatic choice: the key unset, its line removed from totk.ini
+    } else {   // the automatic choice: the key unset, its line removed from fe3h.ini
         const char *k = key;
         cfg_reset(&k, 1);
     }
@@ -220,7 +220,7 @@ int opt_save_tick(int force) {
     g_save_at = 0;
     if (!cfg_save() && !g_save_logged) {
         g_save_logged = true;
-        rt_log("menu: could not write totk.ini; the changed settings hold for this session");
+        rt_log("menu: could not write fe3h.ini; the changed settings hold for this session");
     }
     return 0;
 }
@@ -400,7 +400,7 @@ int opt_bind_row(const char *key, const char *label, UiTextId desc, const char *
         ImGui::PopID();
     }
     char k[64];
-    snprintf(k, sizeof k, "TOTK_%s", key);
+    snprintf(k, sizeof k, "FE3H_%s", key);
     if (row_foc) desc_set(g_focus, desc, k, NULL, NULL);
     if (row_hov) desc_set(g_hover, desc, k, NULL, NULL);
     if (!g_first.text[0]) desc_set(g_first, desc, k, NULL, NULL);

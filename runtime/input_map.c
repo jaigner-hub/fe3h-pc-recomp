@@ -1,5 +1,5 @@
-// From totk-pc-recomp runtime/input_map.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
-// Binding tables (keyboard/mouse and gamepad), their totk.ini overrides, the pure mapping functions and the Buttons
+// From totk-pc-recomp runtime/input_map.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// Binding tables (keyboard/mouse and gamepad), their fe3h.ini overrides, the pure mapping functions and the Buttons
 // tab's edits (input_map.h). No Win32 or SDL here.
 #include <ctype.h>
 #include <math.h>
@@ -169,7 +169,7 @@ void input_map_configure(void) {
     input_map_reset();
     for (int a = 0; a < ACTION_COUNT; a++) {
         char var[32];
-        snprintf(var, sizeof var, "TOTK_BIND_%s", action_names[a]);
+        snprintf(var, sizeof var, "FE3H_BIND_%s", action_names[a]);
         const char *v = cfg_get(var);
         if (v && *v && input_map_bind(action_names[a], v)) rt_log("input: %s = %s", var + 5, v);
     }

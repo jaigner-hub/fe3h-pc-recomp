@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_ext.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/nvn_ext.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // NVN entry points beyond the core implementation that only report stored object state, attach debugging metadata,
 // convert timestamps or take hardware hints. None of them changes rendering
 // results. Ported from MacNativeGames games/totk/third_party/d2r_gfx/gfx/nvn/totk_nvn_ext.c @ b75be8cf (MIT,

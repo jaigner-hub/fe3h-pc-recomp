@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/fs.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/fs.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Adapted from MacNativeGames games/totk/runtime/fs_host.h @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames
 // contributors).
 // The nn::fs host layer: the read-only RomFS (romfs.c) and writable save, temporary and
@@ -42,7 +42,7 @@ size_t romfs_overlay_count(void);
 int romfs_xbox_prompts_ready(void);                        // romfs-patches-xbox was there at start
 int romfs_xbox_prompts_active(void);                       // and was loaded (pad_layout = xbox_prompts at start)
 const char *romfs_overlay(size_t k, const char **file, uint64_t *size, int *is_added);   // RomFS path of overlay k
-void fs_trace(const char *what, const char *path);         // TOTK_TRACE=fs: one line per open
+void fs_trace(const char *what, const char *path);         // FE3H_TRACE=fs: one line per open
 
 // ---- fs_host.c
 wchar_t *fs_wide(const char *utf8);                        // UTF-16 copy for the W APIs; free() it. Fatal on

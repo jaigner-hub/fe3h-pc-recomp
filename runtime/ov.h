@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/ov.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/ov.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Shared by the system overrides: runtime/ov_system.c, ov_input.c, ov_media.c and ov_gfx.c, and their probe.
 // oe_push_message, oe_set_focus and ov_nv_state are in gfx.h (the window posts focus messages, the NVN layer
 // allocates through the recorded callbacks).
@@ -9,7 +9,7 @@
 #include "gfx.h"
 
 // ---- ov_system.c
-int ov_handheld(void);                     // TOTK_OPERATION_MODE=handheld (default docked); fatal on another value
+int ov_handheld(void);                     // FE3H_OPERATION_MODE=handheld (default docked); fatal on another value
 const char *ov_language(void);             // the game's language, a Switch language code ("en-US", "zh-Hans", ...)
-const char *ov_shared_font_dir(char *buf, size_t n);   // TOTK_SHARED_FONTS, else <romfs>/../../firmware/shared-fonts
+const char *ov_shared_font_dir(char *buf, size_t n);   // FE3H_SHARED_FONTS, else <romfs>/../../firmware/shared-fonts
 uint64_t ov_bfttf_size(const uint8_t *p, uint64_t len); // decoded font size of a BFTTF image, 0 if it is not one

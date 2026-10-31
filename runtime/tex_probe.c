@@ -1,5 +1,5 @@
-// From totk-pc-recomp runtime/tex_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
-// totk.exe --probe-vkmem: texture memory checks. The CPU part: block-linear copies against an
+// From totk-pc-recomp runtime/tex_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// fe3h.exe --probe-vkmem: texture memory checks. The CPU part: block-linear copies against an
 // independent reference, ASTC void-extent blocks, and the NVN -> VkFormat table against GPU0. The GPU part:
 // guest heap imported as a VkBuffer, write watch against CPU, GPU and ReadFile writes, the virtual-pool page table,
 // and textures uploaded from block-linear storage and read back.

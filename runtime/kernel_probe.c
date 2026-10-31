@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/kernel_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/kernel_probe.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // --probe-kernel: the kernel's waits, wake orders, virtual cores, fibers and
 // ExitThread on guest threads whose entries are host functions, then real lifted code on four guest threads: main's
 // PLT stub for nn::os::GetSystemTick, through the lifted sdk function, to rt_ticks.
@@ -418,11 +418,11 @@ static void test_cores(Cpu *c) {
     int now, held_max;
     kern_core_stats(&now, &held_max);
     DWORD cpus = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
-    int gate = !cfg_bool("TOTK_FREE_CORES");   // the kernel's own switch
+    int gate = !cfg_bool("FE3H_FREE_CORES");   // the kernel's own switch
     int ok = g_run_max <= 3 && held_max <= 3 && !g_core_clash && (cpus < 4 || g_run_max == 3);
     printf("virtual cores: %d threads x %d runs on %lu host CPUs: at most %ld running guest code at once, at most %d "
            "core holders (kernel count), %ld core-number clashes: %s\n", CORE_WORKERS, CORE_RUNS, cpus, g_run_max,
-           held_max, g_core_clash, !gate ? "not checked (TOTK_FREE_CORES is set)" : ok ? "ok" : "FAIL");
+           held_max, g_core_clash, !gate ? "not checked (FE3H_FREE_CORES is set)" : ok ? "ok" : "FAIL");
     CHECK(ok || !gate, "virtual cores");
 }
 

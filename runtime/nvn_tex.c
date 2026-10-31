@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_tex.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/nvn_tex.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // NVN texture storage size / alignment / per-level offsets (Tegra X1 block-linear layout).
 // Ported from MacNativeGames games/totk/third_party/d2r_gfx/gfx/nvn/nvn_tex.c @ b75be8cf; Apple parts dropped, layout math unchanged.
 // Based on deko3d source/dk_image.cpp (zlib license, Copyright (C) 2018-2020 fincs), reproduced below as in MNG's LICENSE.deko3d.
@@ -111,7 +111,7 @@ static uint64_t level_offset(const nvn_texdesc *d, unsigned level, unsigned dpl,
 static int minimal_layout_on(void) {
     static _Atomic int enabled = -1;
     int value = atomic_load(&enabled);
-    if (value < 0) { const char *e = cfg_get("TOTK_MINIMAL_LAYOUT"); value = !(e && !strcmp(e, "0")); atomic_store(&enabled, value); }
+    if (value < 0) { const char *e = cfg_get("FE3H_MINIMAL_LAYOUT"); value = !(e && !strcmp(e, "0")); atomic_store(&enabled, value); }
     return value;
 }
 static uint64_t layer_bytes(const nvn_texdesc *d, unsigned dpl, int layered,

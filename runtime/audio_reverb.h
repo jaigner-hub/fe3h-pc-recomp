@@ -1,8 +1,8 @@
-// From totk-pc-recomp runtime/audio_reverb.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/audio_reverb.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Adapted from MacNativeGames games/totk/runtime/audio_reverb.c @ b75be8c (MIT, Copyright (c) 2026 MacNativeGames
 // contributors), based on Ryujinx.Audio (MIT, Copyright (c) Ryujinx Team and Contributors).
-#ifndef TOTK_AUDIO_REVERB_H
-#define TOTK_AUDIO_REVERB_H
+#ifndef FE3H_AUDIO_REVERB_H
+#define FE3H_AUDIO_REVERB_H
 #include <stdint.h>
 typedef struct {
     uint8_t input[6], output[6]; uint16_t channel_max, channels;

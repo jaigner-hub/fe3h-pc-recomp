@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/input_map.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/input_map.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Keyboard, mouse and gamepad bindings, free of any window system: the tables map platform-neutral key and pad ids to
 // Switch actions. input_win.c translates Win32 virtual keys and SDL buttons to these ids (one place); a Linux port
 // translates SDL scancodes the same way. The remapping rows of the menu's Controls tab (ui/binds_page.cpp) edits a copy of the tables and writes
@@ -46,7 +46,7 @@ enum {
     PAD_COUNT
 };
 
-// Gamepad layouts (TOTK_PAD_LAYOUT): which face button is Switch A. Nintendo: by position, east A, south B, west Y,
+// Gamepad layouts (FE3H_PAD_LAYOUT): which face button is Switch A. Nintendo: by position, east A, south B, west Y,
 // north X. Xbox: south A, east B, west X, north Y, as an Xbox pad labels them (cross A, circle B on a PlayStation pad).
 enum { PAD_LAYOUT_NINTENDO, PAD_LAYOUT_XBOX, PAD_LAYOUT_COUNT };
 
@@ -66,7 +66,7 @@ typedef struct InputMap {
 extern InputMap input_map;
 
 void input_map_reset(void);
-// The script and totk.ini names, any case when parsed; NULL for an id without one. Actions: A B X Y LCLICK RCLICK L R ZL
+// The script and fe3h.ini names, any case when parsed; NULL for an id without one. Actions: A B X Y LCLICK RCLICK L R ZL
 // ZR PLUS MINUS LEFT UP RIGHT DOWN, then LSTICK_LEFT LSTICK_UP LSTICK_RIGHT LSTICK_DOWN and the same for RSTICK (the
 // stick directions the keys drive). Keys: a-z 0-9 space tab lshift ... (key_names in input_map.c). Pads: south east ...
 const char *input_action_name(int action);
@@ -78,10 +78,10 @@ const char *input_pad_name(int pad);
 // layout; pad:default keeps each layout's own button. Stick directions take keys only. Invalid entries are logged and
 // skipped; when none is valid the action keeps its bindings. 1 when applied.
 int input_map_bind(const char *button, const char *list);
-// Applies the TOTK_BIND_<action> settings (cfg_get) over the defaults: at start, and again when one of them changes.
+// Applies the FE3H_BIND_<action> settings (cfg_get) over the defaults: at start, and again when one of them changes.
 void input_map_configure(void);
 
-// The layout for a TOTK_PAD_LAYOUT value: "nintendo" or "xbox" (any case); "xbox_prompts" is the Nintendo layout with
+// The layout for a FE3H_PAD_LAYOUT value: "nintendo" or "xbox" (any case); "xbox_prompts" is the Nintendo layout with
 // the A/B and X/Y prompts swapped (runtime/romfs.c overlay_init), so the buttons map as "nintendo". Anything else
 // ("auto", NULL) picks Nintendo when the pad's east button is labelled A (a Switch Pro Controller, a GuliKit) and Xbox
 // otherwise.

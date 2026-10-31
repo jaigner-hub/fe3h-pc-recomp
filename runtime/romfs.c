@@ -1,21 +1,21 @@
-// From totk-pc-recomp runtime/romfs.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/romfs.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Adapted from MacNativeGames games/totk/runtime/romfs.c @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames
 // contributors).
 // Read-only game RomFS backed by the player's extracted image.
 //
 // Input: <romfs>/romfs.bin (rt_config()->romfs), whose six IVFC levels and SHA-256 tools/extract.py verified, and
-// romfs-index.bin next to totk.exe (TOTK_ROMFS_INDEX overrides), which tools/romfs_index.py wrote together with
+// romfs-index.bin next to fe3h.exe (FE3H_ROMFS_INDEX overrides), which tools/romfs_index.py wrote together with
 // romfs_config.h. fs_init checks the index's SHA-256 and layout and the image size. The full 17 GB hash runs only with
-// TOTK_ROMFS_VERIFY=full; a proof file (.romfs-verified-v1 next to the index, or in TOTK_ROMFS_PROOF_DIR) keyed by
-// the file's volume, file id, size and times skips it on later starts, TOTK_ROMFS_VERIFY=force ignores the proof.
+// FE3H_ROMFS_VERIFY=full; a proof file (.romfs-verified-v1 next to the index, or in FE3H_ROMFS_PROOF_DIR) keyed by
+// the file's volume, file id, size and times skips it on later starts, FE3H_ROMFS_VERIFY=force ignores the proof.
 //
 // Reads are positional (ReadFile with an OVERLAPPED offset on a FILE_FLAG_OVERLAPPED handle, one event per thread),
-// so threads read the image in parallel without a file-pointer lock. TOTK_ROMFS_MMAP=1 maps the image instead.
+// so threads read the image in parallel without a file-pointer lock. FE3H_ROMFS_MMAP=1 maps the image instead.
 //
 // Overlays: files listed in a directory's manifest.tsv are served in place of the originals. Each line names a RomFS
 // path, the overlay's size and SHA-256 and the original's SHA-256 ("-" adds a file the RomFS lacks; it is numbered
-// after the RomFS's own files, file_count + k in path order). The directories, in this order: TOTK_ROMFS_PATCHES and
-// TOTK_ROMFS_MODS; unset or "0" = none. A missing path, a size or hash mismatch or a changed original stops the start.
+// after the RomFS's own files, file_count + k in path order). The directories, in this order: FE3H_ROMFS_PATCHES and
+// FE3H_ROMFS_MODS; unset or "0" = none. A missing path, a size or hash mismatch or a changed original stops the start.
 // An overlay file is opened when the game opens it; its identity (volume, file id, size, last write) is kept from the
 // start check, and an open that finds another file there stops the game.
 #include <windows.h>
@@ -151,9 +151,9 @@ static void sha_range(HANDLE f, uint64_t offset, uint64_t size, char hex[65], in
 typedef struct { char magic[16], sha256[65]; uint8_t pad[7]; Identity id; } RomfsProof;
 
 static void verify_image(const char *dir) {
-    const char *mode = cfg_get("TOTK_ROMFS_VERIFY");
+    const char *mode = cfg_get("FE3H_ROMFS_VERIFY");
     if (!mode || (strcmp(mode, "full") && strcmp(mode, "force"))) return;
-    const char *pdir = cfg_get("TOTK_ROMFS_PROOF_DIR");
+    const char *pdir = cfg_get("FE3H_ROMFS_PROOF_DIR");
     if (pdir && *pdir) dir = pdir;
     RomfsProof want = {0}, saved;
     memcpy(want.magic, "TOTKRFS-PROOF-1", 16);
@@ -431,7 +431,7 @@ int romfs_xbox_prompts_ready(void) { return xbox_prompts_ready; }
 int romfs_xbox_prompts_active(void) { return xbox_prompts_active; }
 
 static void overlay_init(void) {
-    // TOTK_ROMFS_PATCHES unset: romfs-patches next to romfs-index.bin if it has a manifest (tools/make_romfs_patches.py).
+    // FE3H_ROMFS_PATCHES unset: romfs-patches next to romfs-index.bin if it has a manifest (tools/make_romfs_patches.py).
     // A game resolution that is not 16:9 takes romfs-patches-<w>x<h> instead when it is there: the same overlay with
     // the UI laid out for that shape (make_romfs_patches.py --aspect). 1.2.1 has no camera aspect patch, so it keeps
     // the 16:9 layout (res_wants_wide_overlay).
@@ -440,7 +440,7 @@ static void overlay_init(void) {
     // until restart even though the layout itself changes live. Each folder replaces romfs-patches as a whole and the
     // setup builds no wide folder with Xbox prompts, so a wide game resolution keeps the Switch prompts.
     char def[2100], xbox[2100];
-    const char *patches = cfg_get("TOTK_ROMFS_PATCHES");
+    const char *patches = cfg_get("FE3H_ROMFS_PATCHES");
     int wide = 0;
     unsigned out[2];
     res_wanted(out);
@@ -457,7 +457,7 @@ static void overlay_init(void) {
     xbox_prompts_ready =
         snprintf(xbox, sizeof xbox, "%s/romfs-patches-xbox/manifest.tsv", index_dir) < (int)sizeof xbox &&
         GetFileAttributesA(xbox) != INVALID_FILE_ATTRIBUTES;
-    int want_xbox = !_stricmp(cfg_value("TOTK_PAD_LAYOUT"), "xbox_prompts");
+    int want_xbox = !_stricmp(cfg_value("FE3H_PAD_LAYOUT"), "xbox_prompts");
     if (!patches && want_xbox && xbox_prompts_ready) {
         xbox[strlen(xbox) - strlen("/manifest.tsv")] = 0;
         xbox_prompts_active = overlay_load(xbox, 1);
@@ -466,7 +466,7 @@ static void overlay_init(void) {
     } else if (want_xbox) {
         rt_log("RomFS overlay: pad_layout = xbox_prompts, but %s; Switch prompts stay",
                wide      ? "the game resolution takes the wide UI layout"
-               : patches ? "TOTK_ROMFS_PATCHES is set"
+               : patches ? "FE3H_ROMFS_PATCHES is set"
                          : "romfs-patches-xbox has no manifest.tsv (run the setup again)");
     }
     if (!patches && !xbox_prompts_active && snprintf(def, sizeof def, "%s/romfs-patches/manifest.tsv", index_dir) < (int)sizeof def &&
@@ -474,7 +474,7 @@ static void overlay_init(void) {
         def[strlen(def) - strlen("/manifest.tsv")] = 0;
         patches = def;
     }
-    const char *dirs[2] = {patches, cfg_get("TOTK_ROMFS_MODS")};
+    const char *dirs[2] = {patches, cfg_get("FE3H_ROMFS_MODS")};
     for (int i = 0; i < 2; i++)
         if (dirs[i] && *dirs[i] && strcmp(dirs[i], "0")) overlay_load(dirs[i], 0);
     heapdef_overlay();
@@ -487,9 +487,9 @@ static void overlay_init(void) {
 }
 
 // ---- start
-// romfs-index.bin next to totk.exe, or TOTK_ROMFS_INDEX.
+// romfs-index.bin next to fe3h.exe, or FE3H_ROMFS_INDEX.
 static void index_path(char *out, size_t cap) {
-    const char *e = cfg_get("TOTK_ROMFS_INDEX");
+    const char *e = cfg_get("FE3H_ROMFS_INDEX");
     if (e && *e) {
         need(snprintf(out, cap, "%s", e) < (int)cap, "index path");
         return;
@@ -514,7 +514,7 @@ static void load_index(void) {
     else strcpy(index_dir, ".");
     HANDLE f = open_read(path, 0);
     if (f == INVALID_HANDLE_VALUE)
-        rt_fatal("RomFS index %s missing (tools/build_game.py writes it next to totk.exe)", path);
+        rt_fatal("RomFS index %s missing (tools/build_game.py writes it next to fe3h.exe)", path);
     LARGE_INTEGER sz;
     need(GetFileSizeEx(f, &sz) && sz.QuadPart >= 24 && sz.QuadPart < (128 << 20), "index size");
     index_size = (size_t)sz.QuadPart;
@@ -562,7 +562,7 @@ static BOOL CALLBACK init_once(PINIT_ONCE once, PVOID param, PVOID *ctx) {
     const char *dir = rt_config()->romfs;
     need(snprintf(image_file, sizeof image_file, "%s/romfs.bin", dir) < (int)sizeof image_file, "image path");
     image = open_read(image_file, 1);
-    if (image == INVALID_HANDLE_VALUE) rt_fatal("RomFS image %s missing (error %lu); put romfs.bin into the romfs folder next to totk.exe or set TOTK_ROMFS",
+    if (image == INVALID_HANDLE_VALUE) rt_fatal("RomFS image %s missing (error %lu); put romfs.bin into the romfs folder next to fe3h.exe or set FE3H_ROMFS",
                                           image_file, GetLastError());
     LARGE_INTEGER sz;
     need(GetFileSizeEx(image, &sz), "image size");
@@ -571,7 +571,7 @@ static BOOL CALLBACK init_once(PINIT_ONCE once, PVOID param, PVOID *ctx) {
                  (unsigned long long)sz.QuadPart, (unsigned long long)ROMFS_IMAGE_SIZE);
     rt_log("RomFS image %s: size ok (%llu bytes)", image_file, (unsigned long long)ROMFS_IMAGE_SIZE);
     verify_image(index_dir);
-    const char *mm = cfg_get("TOTK_ROMFS_MMAP");
+    const char *mm = cfg_get("FE3H_ROMFS_MMAP");
     if (mm && strcmp(mm, "0")) {
         HANDLE map = CreateFileMappingW(image, NULL, PAGE_READONLY, 0, 0, NULL);
         const void *v = map ? MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0) : NULL;

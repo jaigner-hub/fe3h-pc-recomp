@@ -1,8 +1,8 @@
-# From totk-pc-recomp tools/build_shaders.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+# From totk-pc-recomp tools/build_shaders.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 """Compile the runtime's own GLSL shaders (runtime/shaders/*.comp) into C headers of SPIR-V words.
 
 Each runtime/shaders/<name>.comp becomes runtime/<name>_spv.h, which declares `static const uint32_t <name>_spv[]`
-and records the SHA-256 of the source it came from. The headers are committed, so building totk.exe needs no shader
+and records the SHA-256 of the source it came from. The headers are committed, so building fe3h.exe needs no shader
 compiler; tools/build_game.py refuses to build when a header no longer matches its source. Run this after editing a
 shader. Needs glslc and spirv-val from MSYS2 UCRT64 (package mingw-w64-ucrt-x86_64-shaderc, spirv-tools).
 

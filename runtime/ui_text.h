@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/ui_text.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/ui_text.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Text the host shows the player (runtime/ui_text.c): one catalog, keyed by stable ids. The software keyboard reads it
 // in the game's language (ui_text); the menu and the performance overlay read it in the menu language (menu_text).
 #pragma once
@@ -174,6 +174,6 @@ int ui_text_defined(const char *lang, UiTextId id);
 // The catalog language for a Switch language code ("en-GB" -> "en", "zh-CN" -> "zh-Hans", ...).
 const char *ui_text_lang(const char *switch_code);
 
-// Menu text: ui_text_in(menu language, id). The menu language is TOTK_MENU_LANG ("en" / "ru"); unset, Russian when the
+// Menu text: ui_text_in(menu language, id). The menu language is FE3H_MENU_LANG ("en" / "ru"); unset, Russian when the
 // system UI language is Russian, else English. Follows a live change of the setting.
 const char *menu_text(UiTextId id);

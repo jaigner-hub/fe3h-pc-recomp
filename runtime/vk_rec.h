@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_rec.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/vk_rec.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // The recorder thread (vk_rec.c): the Vulkan calls the replay makes into its command buffer are made by a thread of
 // their own. vk_sync.c brackets each part of a submission with rec_begin (after vkBeginCommandBuffer) and rec_end
 // (before vkEndCommandBuffer). In between, every vkCmd* on that command buffer copies its arguments into a packet of a
@@ -9,7 +9,7 @@
 // vkEndCommandBuffer included; submitting and the command pool stay on the submitting thread.
 //
 // Every vkCmd* the runtime calls through vk.h goes through the rc_* wrappers below (the macros at the end); the
-// extension commands called through function pointers have rec_* wrappers of their own. TOTK_VK_RECORDER=0 makes every
+// extension commands called through function pointers have rec_* wrappers of their own. FE3H_VK_RECORDER=0 makes every
 // call at once (the same calls in the same order), =ab switches it with the A/B blocks (rt_ab), per submission part.
 //
 // The design follows Savage Wind Recomp's and LAS Recomp's recorder threads (LAS Recomp runtime/nvn/vulkan/record.c,
@@ -22,7 +22,7 @@ void rec_end(void);                   // waits for the recorder; no-op when rec_
 // when it records cb, and the wait for it (1); otherwise rec_end and the breadcrumb, and the caller ends cb (0).
 int rec_end_cb(VkCommandBuffer cb, int crumb, uint64_t n);
 void rec_drain(void);                 // waits until the recorder made every call queued so far
-void rec_stats_log(void);             // TOTK_TRACE=perf: packets, bytes, drains and waits since the last call
+void rec_stats_log(void);             // FE3H_TRACE=perf: packets, bytes, drains and waits since the last call
 
 // Extension commands called through device function pointers.
 void rec_push_tpl(PFN_vkCmdPushDescriptorSetWithTemplateKHR fn, VkCommandBuffer cb, VkDescriptorUpdateTemplate tpl,

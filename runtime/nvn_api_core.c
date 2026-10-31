@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_api_core.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/nvn_api_core.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // NVN front end, first slice: device, queue, memory pool, buffer, sync and
 // event objects. Ported from MacNativeGames games/totk/third_party/d2r_gfx/gfx/nvn/hle_nvn.c @ b75be8cf (MIT,
 // Copyright (c) 2026 jhaizhou; origin d2r-mobile), lines 137-253, 534-645 and 1975-2001; Metal, mach, the translation
@@ -131,7 +131,7 @@ const pool_t *nvn_pool_find(uint64_t addr, uint64_t len) {
     return p;
 }
 
-// Physical and virtual pools (MacNativeGames totk_vpool.c checks). A CPU-invisible one gets a GPU window range.
+// Physical and virtual pools (MacNativeGames fe3h_vpool.c checks). A CPU-invisible one gets a GPU window range.
 // A CPU-visible physical pool (1.4.3: flags 0x18c, GPU_NO_ACCESS) keeps the game's storage for the CPU; the back end
 // gives it device memory as any physical pool (vk_memory.c vk_pool_init), which the GPU reaches through virtual pools.
 static int pool_place(pool_t *o) {
@@ -269,7 +269,7 @@ NVN_API(nvnMemoryPoolBuilderSetStorage) {
 NVN_API(nvnMemoryPoolBuilderSetFlags) { ((pool_builder_t *)arg_p(c, 0))->flags = (uint32_t)arg_x(c, 1); }
 // NVNboolean nvnMemoryPoolInitialize(NVNmemoryPool *p, const NVNmemoryPoolBuilder *b)
 // Pool setup imports, mirrors and maps memory in the back end (the driver, VirtualAlloc): up to 20 ms on the game's
-// loader threads, which held a virtual core through it while job workers waited (TOTK_CORE_DIAG). The thread gives
+// loader threads, which held a virtual core through it while job workers waited (FE3H_CORE_DIAG). The thread gives
 // the core up, as for any blocking host call.
 NVN_API(nvnMemoryPoolInitialize) {
     NVN_BLOCKING();
@@ -345,7 +345,7 @@ NVN_API(nvnMemoryPoolMap) {
     if (o->magic != NVN_POOL_MAGIC || (o->flags & NVN_MEMORY_POOL_FLAGS_CPU_NO_ACCESS)) { ret_x(c, 0); return; }
     ret_x(c, (uintptr_t)o->mem);
 }
-// MacNativeGames totk_vpool.c: every request is checked before any mapping changes.
+// MacNativeGames fe3h_vpool.c: every request is checked before any mapping changes.
 static int check_request(const pool_t *v, const nvn_mapping_t *r, int i) {
     uint64_t end = (uint64_t)r->virtual_offset + r->size;
     if (r->virtual_offset < 0 || r->physical_offset < 0 || !r->size) {
@@ -581,12 +581,12 @@ NVN_API(nvnQueueFinish) {
 // the replay, and that frame draws other objects' matrices (phantom rocks, flat far field).
 // The guard makes the producer wait, at its commit point, until the newest submit has been replayed and completed.
 // lod_entered / lod_issued count submits that entered QueueSubmitCommands / reached the back end; lod_fence holds
-// the fence of the last LOD_RING. TOTK_LOD_GUARD=0 turns the wait off.
+// the fence of the last LOD_RING. FE3H_LOD_GUARD=0 turns the wait off.
 #define LOD_RING 64
 static uint64_t lod_entered, lod_issued, lod_fence[LOD_RING];
 
 // void nvnQueueSubmitCommands(NVNqueue *q, int n, const NVNcommandHandle *handles): replayed on this thread with its
-// core given up (section 2.2), or queued for the replay thread (TOTK_REPLAY_ASYNC, vk_backend.c); the newest fence
+// core given up (section 2.2), or queued for the replay thread (FE3H_REPLAY_ASYNC, vk_backend.c); the newest fence
 // value is what QueueFenceSync records. With the queue the fence covers replay and GPU, so the LOD guard below waits
 // for both.
 NVN_API(nvnQueueSubmitCommands) {
@@ -626,7 +626,7 @@ static void obs_release_read(Cpu *c) {
     if (lr != 0x70008c70c8ull) return;
     static int on = -1;
     if (on < 0) {
-        on = cfg_bool("TOTK_LOD_GUARD");
+        on = cfg_bool("FE3H_LOD_GUARD");
     }
     if (!on || *(volatile uint8_t *)(uintptr_t)(obj + 0x528) != *(volatile uint8_t *)(uintptr_t)(obj + 0x529)) return;
     uint64_t e = __atomic_load_n(&lod_entered, __ATOMIC_SEQ_CST);

@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/gfx_window.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+// From totk-pc-recomp runtime/gfx_window.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 // Win32 window, Vulkan surface and swapchain, present blit, 60 Hz vsync thread, focus.
 // Swapchain set-up ported from LAS Recomp, runtime/nvn/vulkan/device.c:254-330 (https://github.com/peiikai/LASRecomp @
 // da35b83a9611d046a9a681aae668d7085954d37f, MIT, Copyright (c) 2026 Peiikai), SDL replaced by Win32. Focus and vsync
@@ -12,9 +12,9 @@
 //
 // The in-game menu (ui/menu.h) draws over the game image in the present's command buffer, after the blit; its keyboard
 // and mouse come from the window procedure (ui/menu_win.cpp). The window's size and fullscreen state are the settings
-// TOTK_WINDOW_SIZE and TOTK_FULLSCREEN, applied at start and whenever a cfg_set changes them (window_settings_live).
+// FE3H_WINDOW_SIZE and FE3H_FULLSCREEN, applied at start and whenever a cfg_set changes them (window_settings_live).
 //
-// The process is per-monitor DPI aware (totk.manifest): every size here is physical pixels, TOTK_WINDOW_SIZE included,
+// The process is per-monitor DPI aware (fe3h.manifest): every size here is physical pixels, FE3H_WINDOW_SIZE included,
 // and the swapchain matches the screen pixel for pixel. A window moved to a monitor at another display scale keeps its
 // client size (WM_GETDPISCALEDSIZE); the menu takes its text size floor from the window's DPI (gfx_window_dpi).
 #include <stdio.h>
@@ -51,8 +51,8 @@ static volatile LONG g_focused = 1;
 static volatile LONG g_focus_msgs;
 static CRITICAL_SECTION g_start_lock;       // gfx_window_start / vsync start
 static int g_started, g_wnd_failed;
-static int g_background;                   // TOTK_BACKGROUND_WINDOW: the window stays behind the user's windows
-static int g_fs_pending;                   // window thread: TOTK_FULLSCREEN waits for the first activation
+static int g_background;                   // FE3H_BACKGROUND_WINDOW: the window stays behind the user's windows
+static int g_fs_pending;                   // window thread: FE3H_FULLSCREEN waits for the first activation
 static volatile LONG g_dpi = USER_DEFAULT_SCREEN_DPI;   // the window's DPI, set by the window thread
 
 // ---- swapchain and present state (g_pl)
@@ -79,7 +79,7 @@ static int g_cap_w, g_cap_h, g_cap_valid;
 static int g_flip_on;            // vk_present_blit submitted the blit of swapchain image g_flip_idx; vk_present_flip presents it
 static uint32_t g_flip_idx;
 
-// ---- TOTK_FLIGHT thumbnails (flight.c; g_pl): each present also blits the swapchain image down into slot frame % g_th_n
+// ---- FE3H_FLIGHT thumbnails (flight.c; g_pl): each present also blits the swapchain image down into slot frame % g_th_n
 // of a host-visible ring. A slot's tag names the frame it holds complete; recording a new frame clears the tag first,
 // and the tag is set once the fence of that present has signalled.
 #define TH_BYTES ((VkDeviceSize)FLIGHT_THUMB_W * FLIGHT_THUMB_H * 4)
@@ -207,15 +207,15 @@ static void outer_size(HWND h, int cw, int ch, int *ow, int *oh) {
     *oh = r.bottom - r.top;
 }
 
-// TOTK_FULLSCREEN=1: borderless window over the monitor. TOTK_WINDOW_SIZE=<w>x<h>: client area of the window (the
+// FE3H_FULLSCREEN=1: borderless window over the monitor. FE3H_WINDOW_SIZE=<w>x<h>: client area of the window (the
 // swapchain follows the window; the game image is scaled to it).
 static int cfg_fullscreen(void) {
-    return cfg_bool("TOTK_FULLSCREEN");
+    return cfg_bool("FE3H_FULLSCREEN");
 }
 
 static void cfg_window_size(int *w, int *h) {
     int x = 0, y = 0;
-    if (sscanf(cfg_value("TOTK_WINDOW_SIZE"), "%dx%d", &x, &y) != 2 || x < 640 || y < 360 || x > 7680 || y > 4320)
+    if (sscanf(cfg_value("FE3H_WINDOW_SIZE"), "%dx%d", &x, &y) != 2 || x < 640 || y < 360 || x > 7680 || y > 4320)
         sscanf(cfg_meta("WINDOW_SIZE")->def, "%dx%d", &x, &y);   // unparsable or out of range: the default
     *w = x;
     *h = y;
@@ -260,14 +260,14 @@ static char g_applied_size[32];
 static int g_applied_fs;
 
 static void note_applied(void) {
-    snprintf(g_applied_size, sizeof g_applied_size, "%s", cfg_value("TOTK_WINDOW_SIZE"));
+    snprintf(g_applied_size, sizeof g_applied_size, "%s", cfg_value("FE3H_WINDOW_SIZE"));
     g_applied_fs = cfg_fullscreen();
 }
 
 // Window thread: the window takes the size and fullscreen state of the settings when they changed. In fullscreen the
 // size goes into the placement restored when fullscreen ends.
 static void apply_settings(HWND h) {
-    int size_changed = strcmp(cfg_value("TOTK_WINDOW_SIZE"), g_applied_size) != 0, fs = cfg_fullscreen(), fs_changed = fs != g_applied_fs;
+    int size_changed = strcmp(cfg_value("FE3H_WINDOW_SIZE"), g_applied_size) != 0, fs = cfg_fullscreen(), fs_changed = fs != g_applied_fs;
     note_applied();
     if (size_changed) {
         int cw, ch, ow, oh;
@@ -297,15 +297,15 @@ void gfx_window_apply_settings(void) {
 }
 
 // Present path (g_pl held): a settings change (cfg_version) reaches the window thread, which applies a changed size or
-// fullscreen; a changed TOTK_VK_PRESENT rebuilds the swapchain at this present.
+// fullscreen; a changed FE3H_VK_PRESENT rebuilds the swapchain at this present.
 static void window_settings_live(void) {
     static unsigned seen;
     static int started;
-    static char present[16];   // the TOTK_VK_PRESENT the swapchain was made with
+    static char present[16];   // the FE3H_VK_PRESENT the swapchain was made with
     unsigned v = cfg_version();
     if (started && v == seen) return;
     seen = v;
-    const char *e = cfg_value("TOTK_VK_PRESENT");
+    const char *e = cfg_value("FE3H_VK_PRESENT");
     if (!started || strncmp(e, present, sizeof present - 1)) {
         snprintf(present, sizeof present, "%s", e);
         if (started) InterlockedExchange(&g_dirty, 1);
@@ -318,7 +318,7 @@ void gfx_window_request_close(void) {
     if (g_hwnd) PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
 }
 
-// ---- refresh rate of the window's monitor (TOTK_FPS_LIMIT=display). The window thread measures it when the window
+// ---- refresh rate of the window's monitor (FE3H_FPS_LIMIT=display). The window thread measures it when the window
 // opens, lands on another monitor or the display mode changes; readers take the stored value. QueryDisplayConfig gives
 // the exact rational rate (59.94, 143.998); EnumDisplaySettings' whole hertz is the fallback.
 static HMONITOR g_rate_mon;
@@ -382,7 +382,7 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
             input_cursor_suspend(1);
             toggle_fullscreen(h);
             input_cursor_suspend(0);
-            cfg_set("TOTK_FULLSCREEN", is_fullscreen(h) ? "1" : "0");   // the menu shows it; the next start keeps it
+            cfg_set("FE3H_FULLSCREEN", is_fullscreen(h) ? "1" : "0");   // the menu shows it; the next start keeps it
             cfg_save();
             note_applied();   // what cfg_get reads now (the environment may still override it)
         }
@@ -437,7 +437,7 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_ACTIVATEAPP: {
         int in = w != 0;
         InterlockedExchange(&g_focused, in);
-        oe_set_focus(in);                          // pinned to 1 by TOTK_ASSUME_FOCUS inside
+        oe_set_focus(in);                          // pinned to 1 by FE3H_ASSUME_FOCUS inside
         oe_push_message(OE_MSG_FOCUS_STATE_CHANGED);
         InterlockedIncrement(&g_focus_msgs);
         if (in && g_fs_pending) {
@@ -462,7 +462,7 @@ static LRESULT CALLBACK wnd_proc(HWND h, UINT m, WPARAM w, LPARAM l) {
 static DWORD WINAPI window_main(void *arg) {
     (void)arg;
     HINSTANCE inst = GetModuleHandleW(NULL);
-    // Icon resource 1 of totk.rc (runtime/totk.ico): the title bar, the taskbar button and Alt+Tab.
+    // Icon resource 1 of fe3h.rc (runtime/fe3h.ico): the title bar, the taskbar button and Alt+Tab.
     WNDCLASSEXW wc = {.cbSize = sizeof wc, .lpfnWndProc = wnd_proc, .hInstance = inst,
                       .hIcon = LoadImageW(inst, MAKEINTRESOURCEW(1), IMAGE_ICON, GetSystemMetrics(SM_CXICON),
                                           GetSystemMetrics(SM_CYICON), LR_SHARED),
@@ -476,9 +476,9 @@ static DWORD WINAPI window_main(void *arg) {
     // The window opens behind the user's windows without taking focus: it shows the game's blank loading frames for a
     // while, and must not cover what the player works on meanwhile. The game still counts itself in focus until the
     // first WM_ACTIVATEAPP, so loading goes on, and keyboard input waits for the foreground (input_win.c). Its taskbar
-    // button flashes until it is brought up, and TOTK_FULLSCREEN waits for that first activation.
-    // TOTK_BACKGROUND_WINDOW=1 (test runs): no flashing, never fullscreen at start, and F11 keeps the window's place.
-    int background = g_background = cfg_get("TOTK_BACKGROUND_WINDOW") && atoi(cfg_get("TOTK_BACKGROUND_WINDOW"));
+    // button flashes until it is brought up, and FE3H_FULLSCREEN waits for that first activation.
+    // FE3H_BACKGROUND_WINDOW=1 (test runs): no flashing, never fullscreen at start, and F11 keeps the window's place.
+    int background = g_background = cfg_get("FE3H_BACKGROUND_WINDOW") && atoi(cfg_get("FE3H_BACKGROUND_WINDOW"));
     g_hwnd = CreateWindowExW(0, wc.lpszClassName, L"TotK Recomp", WND_STYLE, CW_USEDEFAULT, CW_USEDEFAULT, ow, oh, NULL,
                              NULL, inst, NULL);
     if (!g_hwnd) {
@@ -509,10 +509,10 @@ static DWORD WINAPI window_main(void *arg) {
 }
 
 // ---- swapchain
-static const char *g_present_got = "";   // the TOTK_VK_PRESENT value of the mode the swapchain got; "" before one
+static const char *g_present_got = "";   // the FE3H_VK_PRESENT value of the mode the swapchain got; "" before one
 
 static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
-    const char *e = cfg_value("TOTK_VK_PRESENT");
+    const char *e = cfg_value("FE3H_VK_PRESENT");
     VkPresentModeKHR want = !strcmp(e, "mailbox") ? VK_PRESENT_MODE_MAILBOX_KHR
                           : !strcmp(e, "immediate") ? VK_PRESENT_MODE_IMMEDIATE_KHR : VK_PRESENT_MODE_FIFO_KHR;
     uint32_t n = 0;
@@ -527,7 +527,7 @@ static VkPresentModeKHR pick_present_mode(VkPhysicalDevice pd) {
     static int logged = -1;   // the mode last logged: a change from the menu shows in the log
     if ((int)got != logged) {
         logged = (int)got;
-        rt_log("gfx: present mode %s (TOTK_VK_PRESENT=%s)", name, e);
+        rt_log("gfx: present mode %s (FE3H_VK_PRESENT=%s)", name, e);
     }
     return got;
 }
@@ -797,12 +797,12 @@ static void save_capture(const char *path) {
     rt_log("gfx: menu test shot %s (%dx%d)", path, g_cap_w, g_cap_h);
 }
 
-// Where the game's picture (cw x ch) goes on the sw x sh swapchain: TOTK_ASPECT=fit (default) keeps its shape and centres
+// Where the game's picture (cw x ch) goes on the sw x sh swapchain: FE3H_ASPECT=fit (default) keeps its shape and centres
 // it, with black bars at the sides (a 16:9 picture in a 21:9 window) or above and below; stretch fills the swapchain.
 // Bars under a pixel are not drawn. Returns 1 when the rectangle leaves bars to clear.
 static int fit_rect(int cw, int ch, int sw, int sh, int out[4]) {
     out[0] = 0, out[1] = 0, out[2] = sw, out[3] = sh;
-    if (cw <= 0 || ch <= 0 || strcmp(cfg_value("TOTK_ASPECT"), "fit")) return 0;
+    if (cw <= 0 || ch <= 0 || strcmp(cfg_value("FE3H_ASPECT"), "fit")) return 0;
     long long a = (long long)cw * sh, b = (long long)ch * sw;
     if (a < b) {   // narrower than the window: bars at the sides
         int fw = (int)((a + ch / 2) / ch);
@@ -887,7 +887,7 @@ static void present_image(VkImage src, VkImageLayout layout, VkFormat fmt, int w
                      VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                      VK_ACCESS_2_TRANSFER_WRITE_BIT);
     }
-    // FSR (TOTK_UPSCALER) when the picture's place on the swapchain is larger than the crop; else the bilinear blit
+    // FSR (FE3H_UPSCALER) when the picture's place on the swapchain is larger than the crop; else the bilinear blit
     int fsr = general && vk_fsr_record(cb, slot, src, fmt, w, h, rect, dst, to);
     g_scaler = fsr ? 2 : cw != to[2] || ch != to[3];
     if (!fsr) {

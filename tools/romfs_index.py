@@ -1,4 +1,4 @@
-# From totk-pc-recomp tools/romfs_index.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied unchanged.
+# From totk-pc-recomp tools/romfs_index.py @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
 """Build the RomFS index the runtime binary-searches (runtime/romfs.c) and its romfs_config.h.
 
 Adapted from MacNativeGames games/totk/scripts/prepare_romfs_backend.py @ b75be8cf (MIT, Copyright (c) 2026
@@ -85,7 +85,7 @@ def write(romfs, out):
 
 
 def write_placeholder(out):
-    """romfs_config.h without a RomFS (no extracted game on this machine): totk.exe builds, and fs_init stops with a
+    """romfs_config.h without a RomFS (no extracted game on this machine): fe3h.exe builds, and fs_init stops with a
     named fatal."""
     (out / 'romfs-index.bin').unlink(missing_ok=True)
     config = (f'// No RomFS found by tools/romfs_index.py; do not edit. {GENERATED_MARKER}\n'
