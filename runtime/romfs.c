@@ -79,7 +79,33 @@ static double now_s(void) {
 // ---- positional reads
 // Bytes read at off (0 at or past the end of the file), -1 on an I/O error. Works on synchronous and
 // FILE_FLAG_OVERLAPPED handles; the event is per thread, so concurrent reads on one handle do not share it.
+// FE3H_TRACE=fs: every 5 s, the reads of the period (count, bytes, time in ReadFile, the slowest), on the completing
+// thread; a load that waits for the disk shows here.
+static void read_note(uint64_t ns, uint32_t n) {
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static uint64_t t0, reads, bytes, total_ns, max_ns;
+    if (!(rt_trace & RT_TRACE_FS)) return;
+    AcquireSRWLockExclusive(&lock);
+    uint64_t now = kern_now_ns();
+    if (!t0) t0 = now;
+    reads++, bytes += n, total_ns += ns;
+    if (ns > max_ns) max_ns = ns;
+    if (now - t0 >= 5000000000ull) {
+        rt_log("fs: %llu reads, %.1f MiB, %.1f ms in ReadFile (slowest %.2f ms) in %.1f s", (unsigned long long)reads,
+               bytes / 1048576.0, total_ns / 1e6, max_ns / 1e6, (now - t0) / 1e9);
+        t0 = now, reads = bytes = total_ns = max_ns = 0;
+    }
+    ReleaseSRWLockExclusive(&lock);
+}
+
+static int64_t read_at_inner(HANDLE f, void *buf, uint32_t n, uint64_t off);
 static int64_t read_at(HANDLE f, void *buf, uint32_t n, uint64_t off) {
+    uint64_t t0 = (rt_trace & RT_TRACE_FS) ? kern_now_ns() : 0;
+    int64_t r = read_at_inner(f, buf, n, off);
+    if (t0) read_note(kern_now_ns() - t0, r > 0 ? (uint32_t)r : 0);
+    return r;
+}
+static int64_t read_at_inner(HANDLE f, void *buf, uint32_t n, uint64_t off) {
     static _Thread_local HANDLE ev;
     if (!ev && !(ev = CreateEventW(NULL, TRUE, FALSE, NULL)))
         rt_fatal("RomFS: CreateEvent failed (%lu)", GetLastError());

@@ -89,7 +89,15 @@ and the title, in the order found:
   a line saying what it was (`vk_crumbs.c`); refused on NVIDIA, where a marker or a checkpoint between draws loses
   the device at the first frame with that same signature (measured on an RTX 4070, driver 1.4.351).
 
-Next: loading is still about three times slower than hardware; the lifter passes the differential tests on `main`
+- Loading about three times slower than hardware, measured at the boot (title at 58 s). Profiled from a recorded
+  session: no disk time and almost no CPU time, the threads waiting. The dumps showed the render thread inside
+  every `nvnQueueSubmitCommands`, in `submit_sync`'s wait for the queued present, which the present thread takes only
+  after the previous present's display slot: up to a display period per submission, and the loader submits per
+  resource. The wait exists for the asynchronous replay's in-order timeline values; the synchronous replay now skips
+  it (`vk_backend.c` `submit_sync`), and the title appears at 15 s. The load of a save into a chapter is 5-10 s; what
+  follows it (the chapter's narration and movie) is play, not loading.
+
+Next: the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every
 stream.
 

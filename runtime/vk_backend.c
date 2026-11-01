@@ -199,9 +199,14 @@ void gfx_dump_state(void) {
            (unsigned long long)vk_sync_fence_done());
 }
 
+// The queued present is waited for only by the asynchronous replay, where it holds a reserved timeline value that
+// its blit must signal before this submission takes the next (present_image checks the order). The synchronous
+// replay queues presents with value 0, and the window image a queued present reads is not rendered into before
+// nvnWindowAcquireTexture has waited for that image's display slot, so nothing needs the wait. FE3H's loader submits
+// per resource, and this wait, up to a display period each, paced its boot to one submission per frame.
 static uint64_t submit_sync(const uint64_t *handles, int n) {
     vk_sync_start();
-    vk_present_drain();
+    if (gfx_replay_async()) vk_present_drain();
     vk_texture_new_submit();
     return vk_sync_submit(handles, n);
 }
