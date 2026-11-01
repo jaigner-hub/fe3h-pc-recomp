@@ -47,6 +47,28 @@ typedef struct { uint32_t op, fence; uint64_t w[3]; } OpTrace;   // vk_exec_faul
 #define OPTRACE_N (1u << 16)
 static OpTrace optrace[OPTRACE_N];
 static uint64_t optrace_n;
+
+// FE3H_SKIP_OPS=<op name>[,<op name>...]: those ops are not replayed (DISPATCH, DRAW_IND, COPY_B2B, ...), for finding
+// which kind of work a device loss comes from by leaving it out; a diagnostic, the picture is wrong without them.
+static uint8_t skip_ops[OP_COUNT_];
+static int skip_ops_parsed;
+static void skip_ops_init(void) {
+    skip_ops_parsed = 1;
+    const char *e = cfg_get("FE3H_SKIP_OPS");
+    if (!e || !*e) return;
+    for (const char *p = e; *p;) {
+        const char *q = strchr(p, ',');
+        size_t n = q ? (size_t)(q - p) : strlen(p);
+        int found = 0;
+        for (uint32_t op = 0; op < OP_COUNT_; op++) {
+            const char *name = nvn_op_name(op);
+            if (strlen(name) == n && !strncmp(name, p, n)) skip_ops[op] = 1, found = 1;
+        }
+        if (found) rt_log("vk: FE3H_SKIP_OPS: %.*s not replayed", (int)n, p);
+        else rt_log("vk: FE3H_SKIP_OPS: no op named %.*s", (int)n, p);
+        p = q ? q + 1 : p + n;
+    }
+}
 static _Thread_local int x_here;   // this thread is inside vk_exec_record (vk_exec_inline_begin)
 
 // ---- FE3H_TRACE=gfx frame counters
@@ -820,6 +842,8 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
         if (h->size < sizeof *h || (h->size & 7) || h->op >= OP_COUNT_)
             rt_fatal("vk: corrupt command record at %p: op %u size %u", (const void *)h, h->op, h->size);
         const void *a = nvn_op_payload(h);
+        if (!skip_ops_parsed) skip_ops_init();
+        const int skipped = skip_ops[h->op] && h->op != OP_END && h->op != OP_BEGIN && h->op != OP_JUMP && h->op != OP_CALL;
         {   // the op trace (vk_exec_fault_ops): the op, its submission and its first payload words
             OpTrace *t = &optrace[optrace_n++ % OPTRACE_N];
             t->op = h->op;
@@ -828,7 +852,7 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
             memset(t->w, 0, sizeof t->w);
             memcpy(t->w, a, n < sizeof t->w ? n : sizeof t->w);
         }
-        switch (h->op) {
+        if (!skipped) switch (h->op) {   // FE3H_SKIP_OPS: the op is left out
         case OP_END: return;
         case OP_BEGIN: break;
         case OP_JUMP: h = (const op_hdr *)(uintptr_t)((const p_jump *)a)->target; continue;

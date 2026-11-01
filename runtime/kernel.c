@@ -698,9 +698,23 @@ static void dg_sample(RtThread *t) {
 // ---- FE3H_THREAD_DUMP=<frame>[,<frame>...]: at those presents, every guest thread with its priority, its core, what it
 // waits on and a frame-pointer backtrace of its guest context, to find what a game that stopped making progress waits
 // for. The backtrace reads the thread's Cpu while it is blocked in the host, where lifted code has stored its x29/x30.
-// Host threads the dump walks besides the guest ones (the present and replay threads, vk_backend.c).
 static struct { DWORD tid; const char *name; } g_host_threads[8];
 static int g_nhost;
+
+// The calling thread for a log line: a guest thread's handle and priority, a noted host thread's name, or its id.
+const char *kern_thread_describe(char *o, size_t n) {
+    RtThread *t = tcur;
+    DWORD tid = GetCurrentThreadId();
+    if (t) snprintf(o, n, "guest thread %#x prio %d%s (host %lu)", t->handle, t->prio, t->is_main ? " main" : "", (unsigned long)tid);
+    else {
+        const char *name = NULL;
+        for (int i = 0; i < g_nhost; i++) if (g_host_threads[i].tid == tid) name = g_host_threads[i].name;
+        snprintf(o, n, "host thread %s%s%lu", name ? name : "", name ? " " : "", (unsigned long)tid);
+    }
+    return o;
+}
+
+// Host threads the dump walks besides the guest ones (the present and replay threads, vk_backend.c).
 void kern_host_thread_note(const char *name) {
     lock();
     if (g_nhost < 8) {

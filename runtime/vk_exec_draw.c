@@ -2214,7 +2214,9 @@ static void op_draw_idx(VkExec *ex, const p_draw_idx *d) {
     ex->recorded++;
 }
 
-// DrawArraysIndirect: as DrawElementsIndirect below, without the index buffer (vkCmdDrawIndirect from the pool buffer).
+// DrawArraysIndirect: as DrawElementsIndirect below, without the index buffer (vkCmdDrawIndirect from the pool buffer,
+// through the recorder like every other command: vk_rec.h wraps it, or the call would go to the driver on the game's
+// thread while the recorder records the same command buffer, which lost the device in FE3H's first battle).
 static void op_draw_ind(VkExec *ex, const p_draw_ind *d) {
     c0_binst = 0;
     VkMemSpan ip;

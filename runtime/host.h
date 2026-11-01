@@ -167,7 +167,8 @@ void ldr_load(const char *exefs_dir);                      // load, relocate (ov
 int ldr_count(void);
 const RtLoaded *ldr_module(int i);                         // order: main, subsdk0, sdk
 uint64_t ldr_symbol(const char *name);
-void kern_host_thread_note(const char *name);              // kernel.c: a host thread the thread dump walks (present, replay)
+void kern_host_thread_note(const char *name);
+const char *kern_thread_describe(char *o, size_t n);    // kernel.c: the calling thread, for a log line              // kernel.c: a host thread the thread dump walks (present, replay)
 void gfx_dump_state(void);                                 // vk_backend.c: present, replay and fence state, for the thread dump                     // exported definition, 0 if none
 uint64_t ldr_plt_stub(const char *module, const char *name); // PLT stub whose GOT slot holds name, 0 if none
 const char *ldr_describe(uint64_t a, char *buf, int n);    // "main+0x1234 (symbol+0x10)", "host <name>", or the address

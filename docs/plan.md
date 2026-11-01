@@ -73,10 +73,18 @@ and the title, in the order found:
   address 0), some way into the first battle, with no host warning before it. Pool finalization waited for the GPU with
   `vkQueueWaitIdle`, which covers submitted work only; FE3H's loader threads free a pool per resource while the render
   thread records and submits, so a pool's buffers could be destroyed under a submission being recorded. The
-  finalization (and virtual remapping) now hold the submit lock (`vk_sync.c` `vk_sync_exclusive`). That alone did not
+  finalization (and virtual remapping) now hold the submit lock (`vk_sync.c` `vk_sync_exclusive`). That was a real
+  hole but not this fault, and neither was the next one. The cause, found with the Khronos layer's threading check
+  once the Vulkan SDK was installed (`FE3H_VK_VALIDATION=gpu`, GPU-assisted validation): the host records the replay's
+  Vulkan commands on a recorder thread through name-wrapping macros (`vk_rec.h`), and the `vkCmdDrawIndirect` of the
+  new non-indexed indirect draw had no wrapper, so it went to the driver on the game's thread while the recorder was
+  recording the same command buffer. Wrapped like the others. Also seen by the layer: a shared-memory data race in a
+  translated compute shader and SRGB storage views; open. The recorded session (`FE3H_INPUT_RECORD`, replayed with
+  `FE3H_INPUT_SCRIPT`) reproduced the loss on its own, which is how it was run down.
   end it: deferred destruction of any object (images, views, buffers) waited for the timeline value noted at the last
   *submit*, so a texture released on another thread while a submission was being recorded was destroyed while that
-  submission ran; the fence is now noted before the recording (`vk_sync_submit`). Diagnostics:
+  submission ran; the fence is now noted before the recording (`vk_sync_submit`). After a loss, the last three
+  submissions' ops are decoded into `fault-ops.txt` next to the log. Diagnostics:
   `FE3H_CRUMBS=ops` writes a GPU breadcrumb at every pass boundary and before draws and dispatches outside a pass, with
   a line saying what it was (`vk_crumbs.c`); refused on NVIDIA, where a marker or a checkpoint between draws loses
   the device at the first frame with that same signature (measured on an RTX 4070, driver 1.4.351).
