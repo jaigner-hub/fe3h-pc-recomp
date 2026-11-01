@@ -57,7 +57,7 @@ void nvn_submit_prepare_async(const uint64_t *handles, uint64_t *out, int n);
 int gfx_replay_async(void);                                // 1: the back end replays submissions on its own thread
 uint64_t gfx_replayed_submits(void);                       // newest submit number (nvn_submit_count) replayed
 #define NVN_HANDLE_TEX(h) ((int)((h) & 0xfffff))           // combined texture handle = texture id | sampler id << 20
-#define NVN_HANDLE_SAMP(h) ((int)(((h) >> 20) & 0xfff))
+#define NVN_HANDLE_SAMP(h) ((int)(((h) >> 20) & 0xfffff))   // 20 bits once bound: sampler slots of several pools (vk_exec_draw.c pool_handle)
 extern GfxStats gfx_counters;                              // behind gfx_stats(); add with __atomic_fetch_add. frames:
                                                            // the back end's present; nvn_calls/nvn_distinct: NVN_API
 
@@ -100,7 +100,9 @@ int nvn_handle_live(uint64_t handle);                      // 1 while the handle
                                                            // not added again)
 uint64_t nvn_handle_bytes(uint64_t handle);                // bytes of the copy, OP_BEGIN to OP_END; 0 if not live
 uint64_t nvn_submit_count(void);
-int nvn_window_uses_pool(const pool_t *p);                 // a window texture lives in p (nvn_api_obj.c)                           // QueueSubmitCommands calls so far
+int nvn_window_uses_pool(const pool_t *p);
+int nvn_tpool_slot(const dpool_t *p, int id);              // back-end slot of texture id in pool p (nvn_api_obj.c)
+int nvn_spool_slot(const dpool_t *p, int id);              // the same for a sampler id                 // a window texture lives in p (nvn_api_obj.c)                           // QueueSubmitCommands calls so far
 const char *nvn_op_name(uint32_t op);                      // "DRAW_IDX", ...; "?" past OP_COUNT_
 // MemoryPoolInvalidateMappedRange: the CPU is about to read pool storage the GPU wrote. Weak no-op in nvn_ext.c; a back
 // end that renders into host-side copies defines it and writes them back.

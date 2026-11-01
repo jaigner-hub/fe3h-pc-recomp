@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/ov_input.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; adds the single-state GetNpadState overloads (FE3H).
+// From totk-pc-recomp runtime/ov_input.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; adds the single-state GetNpadState overloads (FE3H); logs the initialization once (FE3H calls InitializeNpad every frame).
 // Adapted from MacNativeGames games/totk/runtime/input.c and hid_feedback.c @ b75be8cf (MIT, Copyright (c) 2026
 // MacNativeGames contributors).
 // nn::hid overrides: one connected controller fed by input_poll (gamepad and keyboard,
@@ -45,10 +45,11 @@ static const uint32_t *need_id(Cpu *c, int i, const char *fn) {
 static void ov_initialize_npad(Cpu *c) {
     (void)c;
     AcquireSRWLockExclusive(&lock);
+    int first = !enabled;
     enabled = 1;
     ReleaseSRWLockExclusive(&lock);
-    rt_log("hid: controllers initialized (one connected %s controller)",
-           ov_handheld() ? "handheld" : "full-key");
+    if (first)   // FE3H calls InitializeNpad every frame
+        rt_log("hid: controllers initialized (one connected %s controller)", ov_handheld() ? "handheld" : "full-key");
 }
 
 // void SetSupportedNpadIdType(const NpadIdType *ids, size_t count)

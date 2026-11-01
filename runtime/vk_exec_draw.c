@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_exec_draw.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; separable programs: BindProgram with a subset of stages (FE3H).
+// From totk-pc-recomp runtime/vk_exec_draw.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; separable programs: BindProgram with a subset of stages (FE3H); bound handles become pool slots (FE3H uses several descriptor pools).
 // Draws, binds and dispatches of the Vulkan op-stream replay: the strong
 // vk_exec_op_draw behind vk_exec.c's weak hook. The bind ops fill the VkExec slots; a draw opens the pass, resolves the
 // bound program to translated shaders (the translator's answers come from the bound state), asks vk_pipeline.c for the
@@ -1200,7 +1200,7 @@ static void tex_info_full(VkExec *ex, const GfxShaderRes *r, uint64_t h, int sto
         if (!storage && !separate) {
             // A depth texture sampled without a compare reads one texel on the Switch, whatever the sampler's filter:
             // blending neighbouring depths puts reconstructed positions in mid-air at object edges (shadow masks).
-            int sid = (int)(h >> 20 & 0xfff);
+            int sid = NVN_HANDLE_SAMP(h);
             int point = img && (img->aspect & VK_IMAGE_ASPECT_DEPTH_BIT) && !(r->type & 0x400) &&
                         vk_exec_view_aspect(img, &v, hv) != VK_IMAGE_ASPECT_STENCIL_BIT;
             samp = point ? vk_sampler_point_by_id_locked(sid) : vk_sampler_by_id_locked(sid);
@@ -2321,12 +2321,23 @@ static void op_update_ub(VkExec *ex, const p_update_ub *u) {
 
 // ---- bind ops
 
-static void bind_handles(uint64_t *dst, int cap, const p_bind_handles *b) {
+// A handle's texture id (20 bits) and sampler id (12 bits at bit 20) index the pools bound at this point of the
+// stream; the slot tables are shared by every pool, so they become slots here (nvn_api_obj.c nvn_tpool_slot), once,
+// and every lookup and memo after this sees slots. kind: 0 texture (both ids), 1 sampler (the sampler id), 2 image.
+static uint64_t pool_handle(const VkExec *ex, uint64_t h, int kind) {
+    if (!h) return 0;
+    uint64_t tid = h & 0xfffff, sid = h >> 20 & 0xfff;   // the game's encoding: 20 and 12 bits
+    if (kind != 1) tid = (uint64_t)nvn_tpool_slot(ex->tex_pool, (int)tid);
+    if (kind != 2) sid = (uint64_t)nvn_spool_slot(ex->samp_pool, (int)sid);
+    return tid | sid << 20;   // the replay's: 20 and 20 bits (NVN_HANDLE_TEX, NVN_HANDLE_SAMP)
+}
+
+static void bind_handles(const VkExec *ex, uint64_t *dst, int cap, const p_bind_handles *b, int kind) {
     if (b->stage < 0 || b->stage >= 6 || b->first < 0 || b->n < 0 || b->n > 32 || b->first + b->n > cap) {
         warn_once(W_BIND, "a bind of %d handles at %d of stage %d is out of range: ignored", b->n, b->first, b->stage);
         return;
     }
-    memcpy(&dst[b->first], b->h, sizeof(uint64_t) * (size_t)b->n);
+    for (int i = 0; i < b->n; i++) dst[b->first + i] = pool_handle(ex, b->h[i], kind);
 }
 
 // ---- separable programs
@@ -2450,19 +2461,19 @@ void vk_exec_op_draw(VkExec *ex, uint32_t op, const void *payload) {
     }
     case OP_BIND_TEX: {
         const p_bind_handles *b = payload;
-        bind_handles(b->stage >= 0 && b->stage < 6 ? ex->tex[b->stage] : NULL, 128, b);
+        bind_handles(ex, b->stage >= 0 && b->stage < 6 ? ex->tex[b->stage] : NULL, 128, b, 0);
         ex->tex_serial++;
         bind_gen++;
         break;
     }
     case OP_BIND_SAMP: {
         const p_bind_handles *b = payload;
-        bind_handles(b->stage >= 0 && b->stage < 6 ? ex->samp[b->stage] : NULL, 128, b);
+        bind_handles(ex, b->stage >= 0 && b->stage < 6 ? ex->samp[b->stage] : NULL, 128, b, 1);
         break;
     }
     case OP_BIND_IMG: {
         const p_bind_handles *b = payload;
-        bind_handles(b->stage >= 0 && b->stage < 6 ? ex->img[b->stage] : NULL, 32, b);
+        bind_handles(ex, b->stage >= 0 && b->stage < 6 ? ex->img[b->stage] : NULL, 32, b, 2);
         ex->tex_serial++;   // the shader memo's handle check (feedback_scan reads only textures: a rescan at most)
         bind_gen++;
         break;

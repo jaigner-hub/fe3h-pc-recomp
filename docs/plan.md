@@ -34,6 +34,11 @@ and the title, in the order found:
 - Smaller: the NVN depth mode defaults to NEAR_IS_MINUS_W (FE3H never sets one), `SetCopyImageStride`, the older
   `nvnQueueAcquireTexture`, offline stubs for nifm, socket and the network service account, older `nn::fs` calls.
 
+- After the title: the main menu drew its panes as flat boxes a frame after appearing. FE3H binds two texture pools
+  (4,096 and 12,544 descriptors) and two sampler pools whose ids overlap; the host kept one slot table per kind, keyed
+  by id alone, so the 3D renderer's registrations replaced the menu's. Texture and sampler ids are now slots of their
+  pool (`nvn_api_obj.c` `nvn_tpool_slot`, `vk_exec_draw.c` `pool_handle`); TotK, with one pool of each kind, is unchanged.
+
 Next: loading is still about three times slower than hardware; the opening movie (`nn::movie` over the host decoder)
 and leaving the title with a button press are untested; the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled.

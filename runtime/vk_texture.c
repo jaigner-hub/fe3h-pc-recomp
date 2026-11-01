@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_texture.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/vk_texture.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only; sampler slots span several pools (FE3H).
 // Vulkan textures of the graphics layer: a VkImage cache keyed by storage
 // GPU address plus descriptor, uploads through staging buffers with block-linear deswizzle and ASTC decode (vk_astc.c),
 // re-uploads when page write generations (vk_memory.c) show the storage written, ReadTexels / WriteTexels, the texture
@@ -1602,7 +1602,7 @@ static VkSampler make_sampler(VkCtx *c, const samp_par *d) {
 }
 
 void vk_sampler_register(int id, const samp_par *s) {
-    if (id < 0 || id >= (1 << 12)) rt_fatal("vk: sampler slot %d out of range", id);
+    if (id < 0 || id >= (1 << 20)) rt_fatal("vk: sampler slot %d out of range", id);   // slots of several pools (nvn_spool_slot)
     lock();
     if (id >= nsslots) {
         int n = nsslots ? nsslots : 256;

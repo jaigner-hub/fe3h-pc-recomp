@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_api_obj.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; tracks the live windows for nvn_window_uses_pool (FE3H frees a pool per loaded resource).
+// From totk-pc-recomp runtime/nvn_api_obj.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; tracks the live windows for nvn_window_uses_pool (FE3H frees a pool per loaded resource); texture and sampler ids are slots of their pool (FE3H uses several pools).
 // NVN front end, second slice: descriptor pools, textures, samplers, programs,
 // windows with present pacing, and the state objects. Ported from MacNativeGames
 // games/totk/third_party/d2r_gfx/gfx/nvn/hle_nvn.c @ b75be8cf (MIT, Copyright (c) 2026 jhaizhou; origin d2r-mobile),
@@ -20,6 +20,39 @@
 #include "nvn_tex.h"
 
 // ---------- Descriptor pools
+// An NVN texture or sampler id indexes the pool bound with SetTexturePool / SetSamplerPool; the back end keeps one slot
+// table of each kind. TotK registers into one pool of each kind; FE3H uses several (its 2D layer and its 3D renderer)
+// whose ids overlap, so a slot is the pool's base plus the id: the first pool seen keeps base 0, every further pool
+// starts after the sizes of those before it. A pool is known by its descriptor memory (memory pool and offset), which
+// outlives the NVNtexturePool object the game may initialize again there. Registration (below) and the binds the
+// replay applies (vk_exec_draw.c bind_handles) translate the same way.
+typedef struct { uintptr_t key; int base, n; } DpoolBase;
+static DpoolBase g_tpools[16], g_spools[16];
+static int g_ntpools, g_nspools;
+static SRWLOCK g_dpool_lock = SRWLOCK_INIT;
+
+static int dpool_slot(DpoolBase *tab, int *count, int limit, const dpool_t *p, int id, const char *what) {
+    if (!p || !p->pool) return id;
+    uintptr_t key = (uintptr_t)p->pool->mem + (uintptr_t)p->off;
+    AcquireSRWLockExclusive(&g_dpool_lock);
+    int base = -1;
+    for (int i = 0; i < *count && base < 0; i++)
+        if (tab[i].key == key) base = tab[i].base;
+    if (base < 0) {
+        if (*count == 16) rt_fatal("nvn: more than 16 %s pools", what);
+        base = *count ? tab[*count - 1].base + tab[*count - 1].n : 0;
+        if (base + p->n > limit)
+            rt_fatal("nvn: %s pool %d of %d descriptors at base %d: beyond the %d slots a handle can name", what, *count,
+                     p->n, base, limit);
+        tab[(*count)++] = (DpoolBase){key, base, p->n};
+        NVN_LOG("%s pool %d: %d descriptors at slot base %d", what, *count - 1, p->n, base);
+    }
+    ReleaseSRWLockExclusive(&g_dpool_lock);
+    return base + id;
+}
+int nvn_tpool_slot(const dpool_t *p, int id) { return dpool_slot(g_tpools, &g_ntpools, 1 << 20, p, id, "texture"); }
+int nvn_spool_slot(const dpool_t *p, int id) { return dpool_slot(g_spools, &g_nspools, 1 << 20, p, id, "sampler"); }
+
 // NVNboolean nvnTexturePoolInitialize(NVNtexturePool *tp, const NVNmemoryPool *p, ptrdiff_t offset, int n)
 NVN_API(nvnTexturePoolInitialize) {
     *(dpool_t *)arg_p(c, 0) = (dpool_t){arg_p(c, 1), (int64_t)arg_x(c, 2), (int32_t)arg_x(c, 3)};
@@ -30,7 +63,7 @@ NVN_API(nvnTexturePoolInitialize) {
 NVN_API(nvnTexturePoolFinalize) { (void)c; }
 // void nvnTexturePoolRegisterTexture(const NVNtexturePool *tp, int id, const NVNtexture *t, const NVNtextureView *v)
 NVN_API(nvnTexturePoolRegisterTexture) {
-    gfx_backend()->texture_register((int)arg_x(c, 1), arg_p(c, 2), arg_p(c, 3));
+    gfx_backend()->texture_register(nvn_tpool_slot(arg_p(c, 0), (int)arg_x(c, 1)), arg_p(c, 2), arg_p(c, 3));
 }
 // NVNboolean nvnSamplerPoolInitialize(NVNsamplerPool *sp, const NVNmemoryPool *p, ptrdiff_t offset, int n)
 NVN_API(nvnSamplerPoolInitialize) {
@@ -42,7 +75,7 @@ NVN_API(nvnSamplerPoolInitialize) {
 NVN_API(nvnSamplerPoolFinalize) { (void)c; }
 // void nvnSamplerPoolRegisterSampler(const NVNsamplerPool *sp, int id, const NVNsampler *s)
 NVN_API(nvnSamplerPoolRegisterSampler) {
-    gfx_backend()->sampler_register((int)arg_x(c, 1), &((const samp_t *)arg_p(c, 2))->p);
+    gfx_backend()->sampler_register(nvn_spool_slot(arg_p(c, 0), (int)arg_x(c, 1)), &((const samp_t *)arg_p(c, 2))->p);
 }
 
 // ---------- Texture builder
