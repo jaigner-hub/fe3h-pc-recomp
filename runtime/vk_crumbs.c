@@ -17,11 +17,13 @@ static PFN_vkCmdWriteBufferMarkerAMD write_marker;
 static PFN_vkCmdSetCheckpointNV set_checkpoint;          // VK_NV_device_diagnostic_checkpoints: the per-op crumbs there
 static PFN_vkGetQueueCheckpointDataNV get_checkpoints;
 static VkQueue crumb_queue;
+static int nvidia;
 static VkBuffer buf;
 static VmaAllocation alloc;
 static volatile uint32_t *words;
 
 void vk_crumbs_init(VkCtx *c) {
+    nvidia = c->props.vendorID == 0x10de;
     if (c->has_nv_checkpoints) {
         set_checkpoint = (PFN_vkCmdSetCheckpointNV)vkGetDeviceProcAddr(c->device, "vkCmdSetCheckpointNV");
         get_checkpoints = (PFN_vkGetQueueCheckpointDataNV)vkGetDeviceProcAddr(c->device, "vkGetQueueCheckpointDataNV");
@@ -52,10 +54,10 @@ void vk_crumbs_release(void) {
 }
 
 // FE3H_CRUMBS=ops: a crumb at every pass begin and end and before every draw and dispatch outside a pass, each with a
-// line saying what it was, so a device loss names where the GPU was (for finding a fault, not for play). On NVIDIA
-// the crumb is a checkpoint (VK_NV_device_diagnostic_checkpoints, read back from the queue after the loss): a buffer
-// marker between draws faults there (RTX 4070: the same "invalid write at 0" a lost device reports), inside a pass or
-// not. Elsewhere it is a buffer marker like the submission crumbs.
+// line saying what it was, so a device loss names where the GPU was (for finding a fault, not for play). A buffer
+// marker between draws loses the device on NVIDIA (RTX 4070, driver 1.4.351: an "invalid write at 0" at the first
+// frame, inside a pass or not), and so does a checkpoint (VK_NV_device_diagnostic_checkpoints, which is tried first
+// where it exists), so the option is refused there; elsewhere it is untested.
 #define OP_RING 1024
 static int ops_on = -1;
 static uint64_t op_serial;
@@ -65,6 +67,10 @@ int vk_crumbs_ops(void) {
     if (ops_on < 0) {
         const char *e = cfg_get("FE3H_CRUMBS");
         ops_on = e && !strcmp(e, "ops") && (set_checkpoint != NULL || write_marker != NULL);
+        if (ops_on && nvidia) {   // measured on an RTX 4070: the device is lost at the first frame, markers or checkpoints
+            rt_log("vk: FE3H_CRUMBS=ops is off: a crumb between draws loses the device on NVIDIA (markers and checkpoints alike)");
+            ops_on = 0;
+        }
         if (ops_on) rt_log("vk: FE3H_CRUMBS=ops: a %s at every pass boundary and before draws and dispatches outside a pass",
                            set_checkpoint ? "checkpoint" : "breadcrumb");
     }
