@@ -50,6 +50,20 @@ and the title, in the order found:
   folding it after the mix it feeds (`audio_mixer.c` `mix_depth`). `FE3H_TRACE=audio` now logs the voices, the mix
   routing with the splitters and the Opus decoder's calls (`ov_fe3h.c`).
 
+- After the opening movie, the game froze a few seconds into the first scene, every time at a different line, with
+  the sound looping. The thread dump showed a scheduling deadlock of the host's making: FE3H pins its render thread and
+  job workers to core 2 alone (mask 0x4) and lets the main thread run anywhere; placed on core 2 while cores 0 and 1
+  were busy, the main thread then drained the job queue in a loop without a syscall, waiting for a worker that had
+  given its core up for an NVN call and could get no other. A waiter with a better priority was there, but the main
+  thread held a mutex a better thread waited on, so priority inheritance ranked it above every waiter and it was never
+  asked to move; and the whole game runs under the `nnMain` observer, which counted as a host call and made the main
+  thread uninterruptible anyway. Three changes in `kernel.c` and `hostfn.c`: a thread takes its ideal core, then the
+  free core with the fewest threads pinned to it; a holder that can move to a free core gives way to a waiter that can
+  use no other, priorities aside; guest code run by an observer (`rt_original`) counts as game code.
+  `FE3H_THREAD_DUMP=s<seconds>` dumps by wall-clock time (a stalled game presents no frame), with every thread's host
+  stack, the core owners and the present/replay/fence state; `tools/resolve_map.py` turns the host addresses into
+  symbols with the linker map.
+
 Next: loading is still about three times slower than hardware; the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every
 stream.

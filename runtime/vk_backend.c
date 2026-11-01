@@ -52,6 +52,7 @@ static void wait_until(HANDLE timer, uint64_t at) {
 
 static DWORD WINAPI present_main(void *arg) {
     (void)arg;
+    kern_host_thread_note("present");
     HANDLE timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
     uint64_t last = 0, last_queued = 0;
     AcquireSRWLockExclusive(&pl);
@@ -189,6 +190,15 @@ uint64_t gfx_replayed_submits(void) {
     return v;
 }
 
+// For the thread dump (kernel.c thread_dump): the present and replay queues and the fence values.
+void gfx_dump_state(void) {
+    if (gfx_backend() != &gfx_vulkan_backend) return;
+    rt_log("vk: present pending %d busy %d; replay %s, queued %d, busy %d, submits done %llu of %llu; fences issued %llu, done %llu",
+           pending, busy, gfx_replay_async() ? "asynchronous" : "synchronous", rq_n, r_busy,
+           (unsigned long long)r_submit_done, (unsigned long long)nvn_submit_count(), (unsigned long long)vk_sync_issued(),
+           (unsigned long long)vk_sync_fence_done());
+}
+
 static uint64_t submit_sync(const uint64_t *handles, int n) {
     vk_sync_start();
     vk_present_drain();
@@ -198,6 +208,7 @@ static uint64_t submit_sync(const uint64_t *handles, int n) {
 
 static DWORD WINAPI replay_main(void *arg) {
     (void)arg;
+    kern_host_thread_note("replay");
     perf_replay_thread();
     AcquireSRWLockExclusive(&rl);
     for (;;) {

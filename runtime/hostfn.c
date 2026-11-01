@@ -205,6 +205,10 @@ uint64_t rt_call(Cpu *c, uint64_t fn, int n, ...) {
     return c->x[0];
 }
 
+// The guest definition runs as game code: the observer's host frame is counted out of the thread's host depth while
+// it runs, so the thread can be preempted asynchronously there (kernel.c ap_try refuses a thread in a host call). An
+// observer holds no host lock across rt_original; nnMain's observer (ov_system.c obs_main) wraps the whole game on the
+// main thread, which otherwise could never be interrupted, and spun on a core its workers were pinned to.
 uint64_t rt_original(Cpu *c) {
     uint64_t i = (c->pc - RT_HOSTFN_BASE) >> 4;
     if ((c->pc & 15) || i >= (uint64_t)nslots || !slots[i].original)
@@ -212,7 +216,11 @@ uint64_t rt_original(Cpu *c) {
     uint64_t lr = c->x[30], pc = c->pc;
     c->x[30] = RT_RET_HOST;
     c->pc = slots[i].original;
+    int *d = c->thread ? kern_host_depth(c->thread) : NULL;
+    int depth = d ? *d : 0;
+    if (d) __atomic_store_n(d, depth - 1, __ATOMIC_RELAXED);
     rt_dispatch(c);
+    if (d) __atomic_store_n(d, depth, __ATOMIC_RELAXED);
     c->x[30] = lr;
     c->pc = pc;
     return c->x[0];

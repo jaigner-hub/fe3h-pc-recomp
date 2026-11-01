@@ -166,7 +166,9 @@ typedef struct {
 void ldr_load(const char *exefs_dir);                      // load, relocate (overrides applied), seal; once
 int ldr_count(void);
 const RtLoaded *ldr_module(int i);                         // order: main, subsdk0, sdk
-uint64_t ldr_symbol(const char *name);                     // exported definition, 0 if none
+uint64_t ldr_symbol(const char *name);
+void kern_host_thread_note(const char *name);              // kernel.c: a host thread the thread dump walks (present, replay)
+void gfx_dump_state(void);                                 // vk_backend.c: present, replay and fence state, for the thread dump                     // exported definition, 0 if none
 uint64_t ldr_plt_stub(const char *module, const char *name); // PLT stub whose GOT slot holds name, 0 if none
 const char *ldr_describe(uint64_t a, char *buf, int n);    // "main+0x1234 (symbol+0x10)", "host <name>", or the address
 uint8_t *ldr_read_verified(const char *dir, const char *file, size_t *len);   // whole file, SHA-256 checked against

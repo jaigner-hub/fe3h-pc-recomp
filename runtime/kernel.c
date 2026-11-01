@@ -698,42 +698,149 @@ static void dg_sample(RtThread *t) {
 // ---- FE3H_THREAD_DUMP=<frame>[,<frame>...]: at those presents, every guest thread with its priority, its core, what it
 // waits on and a frame-pointer backtrace of its guest context, to find what a game that stopped making progress waits
 // for. The backtrace reads the thread's Cpu while it is blocked in the host, where lifted code has stored its x29/x30.
+// Host threads the dump walks besides the guest ones (the present and replay threads, vk_backend.c).
+static struct { DWORD tid; const char *name; } g_host_threads[8];
+static int g_nhost;
+void kern_host_thread_note(const char *name) {
+    lock();
+    if (g_nhost < 8) {
+        g_host_threads[g_nhost].tid = GetCurrentThreadId();
+        g_host_threads[g_nhost++].name = name;
+    }
+    unlock();
+}
+
+// The host stack of another thread: suspended, its context read and unwound with ntdll's unwinder (no dbghelp, so no
+// loader lock while it is suspended; a leaf frame without unwind data pops its return address). The thread is resumed
+// before anything that logs or takes a lock, as it may hold one. Up to max return addresses, the newest first.
+static int host_stack(DWORD tid, uint64_t *frames, int max) {
+    if (!tid || tid == GetCurrentThreadId()) return 0;
+    HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, tid);
+    if (!h) return 0;
+    int n = 0;
+    if (SuspendThread(h) != (DWORD)-1) {
+        CONTEXT ctx;
+        memset(&ctx, 0, sizeof ctx);
+        ctx.ContextFlags = CONTEXT_FULL;
+        if (GetThreadContext(h, &ctx)) {
+            for (; n < max && ctx.Rip; ) {
+                frames[n++] = ctx.Rip;
+                DWORD64 base = 0;
+                PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &base, NULL);
+                if (!fn) {
+                    if (IsBadReadPtr((const void *)(uintptr_t)ctx.Rsp, 8)) break;
+                    ctx.Rip = *(const DWORD64 *)(uintptr_t)ctx.Rsp;
+                    ctx.Rsp += 8;
+                } else {
+                    PVOID handler = NULL;
+                    DWORD64 est = 0;
+                    RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, ctx.Rip, fn, &ctx, &handler, &est, NULL);
+                }
+            }
+        }
+        ResumeThread(h);
+    }
+    CloseHandle(h);
+    return n;
+}
+
+static void host_stack_log(DWORD tid) {
+    uint64_t frames[14];
+    int n = host_stack(tid, frames, 14);
+    if (!n) return;
+    char line[1024];
+    int at = snprintf(line, sizeof line, "  host:");
+    for (int i = 0; i < n && at < (int)sizeof line - 80; i++) {
+        HMODULE m = NULL;
+        wchar_t mw[MAX_PATH] = L"?";
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCWSTR)(uintptr_t)frames[i], &m) && m)
+            GetModuleFileNameW(m, mw, MAX_PATH);
+        const wchar_t *mn = wcsrchr(mw, L'\\') ? wcsrchr(mw, L'\\') + 1 : mw;
+        at += snprintf(line + at, sizeof line - (size_t)at, " %ls+%#llx", mn, (unsigned long long)(frames[i] - (uintptr_t)m));
+    }
+    rt_logf("%s\n", line);
+}
+
 static void thread_dump(uint64_t frame) {
     static const char *const kinds[] = {"no wait object (running, ready, sleeping or in a host call)", "mutex", "condition variable", "address", "sync objects"};
     lock();
     rt_log("threads at frame %llu:", (unsigned long long)frame);
+    gfx_dump_state();
+    {   // the virtual cores: who holds each (an exited holder is a leaked core) and who waits for one
+        char line[512];
+        int at = snprintf(line, sizeof line, "cores:");
+        for (int i = 0; i < NCORE; i++) {
+            RtThread *o = g_core_owner[i];
+            if (o) at += snprintf(line + at, sizeof line - (size_t)at, " %d: thread %#llx prio %d%s%s;", i, (unsigned long long)o->id,
+                                  o->prio, o->started ? "" : " not started", o->exited ? " EXITED" : "");
+            else at += snprintf(line + at, sizeof line - (size_t)at, " %d: free;", i);
+        }
+        at += snprintf(line + at, sizeof line - (size_t)at, " waiting:");
+        for (RtThread *w = g_core_wait; w && at < (int)sizeof line - 40; w = w->cnext)
+            at += snprintf(line + at, sizeof line - (size_t)at, " %#llx (prio %d, mask %#llx)", (unsigned long long)w->id, w->prio,
+                           (unsigned long long)w->mask);
+        rt_logf("%s\n", line);
+    }
     for (RtThread *t = g_all; t; t = t->all) {
         if (!t->started || t->exited) continue;
         char e[160];
-        rt_logf("thread %#llx (host %lu) prio %d core %d%s: %s on %#llx (key %#llx), entry %s\n", (unsigned long long)t->id,
-                (unsigned long)t->tid, t->prio, t->cur_core, t->is_main ? " main" : "",
+        rt_logf("thread %#llx (host %lu) prio %d core %d (ideal %d, mask %#llx)%s: %s on %#llx (key %#llx), entry %s\n",
+                (unsigned long long)t->id, (unsigned long)t->tid, t->prio, t->cur_core, t->core, (unsigned long long)t->mask,
+                t->is_main ? " main" : "",
                 t->wkind >= 0 && t->wkind <= W_SYNC ? kinds[t->wkind] : "?",
                 (unsigned long long)(t->wkind == W_SYNC ? t->wobj : t->waddr), (unsigned long long)t->wkey,
                 ldr_describe(t->entry, e, sizeof e));
-        rt_logf("  last woken by thread %#x; blocks %llu\n", t->waker, (unsigned long long)t->nblk);
+        rt_logf("  last woken by thread %#x; blocks %llu; spin passes %llu at %#llx\n", t->waker, (unsigned long long)t->nblk,
+                (unsigned long long)t->sp_n, (unsigned long long)t->sp_site);
         if (t->cur && t->cur_core < 0) {
             const char *h = hostfn_name(t->cur->pc);   // in a host call: pc is that host function's slot
             char d[160];
             rt_logf("  pc %s\n", h ? h : ldr_describe(t->cur->pc, d, sizeof d));
             kern_backtrace(t->cur);
         }
+        host_stack_log((DWORD)t->tid);
+    }
+    for (int i = 0; i < g_nhost; i++) {
+        rt_logf("host thread %s (host %lu)\n", g_host_threads[i].name, (unsigned long)g_host_threads[i].tid);
+        host_stack_log(g_host_threads[i].tid);
     }
     unlock();
 }
 
+// An entry written s<seconds> fires at that wall-clock time since the first present instead, from a host thread: for
+// a game that stopped presenting, where a frame number never comes. The dump reads the thread list under the kernel
+// lock, so the thread it runs on does not matter.
+static DWORD WINAPI thread_dump_timer(LPVOID arg) {
+    uint64_t *secs = arg;
+    uint64_t done = 0;
+    for (;;) {
+        Sleep(1000);
+        done++;
+        for (int i = 0; i < 16 && secs[i]; i++)
+            if (secs[i] == done) thread_dump(done * 1000000000ull);   // the "frame" printed: nanoseconds, told apart by size
+    }
+}
+
 static void thread_dump_frame(uint64_t frame) {
     static int parsed;
-    static uint64_t at[16];
-    static int n;
+    static uint64_t at[16], secs[17];
+    static int n, ns;
     if (!parsed) {
         parsed = 1;
         const char *e = cfg_get("FE3H_THREAD_DUMP");
-        for (char *p = (char *)e; p && *p && n < 16;) {
+        for (char *p = (char *)e; p && *p && n < 16 && ns < 16;) {
             char *end;
-            uint64_t v = strtoull(p, &end, 10);
-            if (end == p) break;
-            at[n++] = v;
+            int by_time = *p == 's';
+            uint64_t v = strtoull(by_time ? p + 1 : p, &end, 10);
+            if (end == p || (by_time && end == p + 1)) break;
+            if (by_time) secs[ns++] = v;
+            else at[n++] = v;
             p = *end == ',' ? end + 1 : end;
+        }
+        if (ns) {
+            HANDLE h = CreateThread(NULL, 0, thread_dump_timer, secs, 0, NULL);
+            if (h) CloseHandle(h);
         }
     }
     for (int i = 0; i < n; i++)
@@ -861,6 +968,34 @@ static void core_put(RtThread *t) {
     core_grant(c);
 }
 
+// A free core t may run on, other than `except`: its ideal core first, then the one with the fewest threads pinned to
+// it alone. FE3H pins its job workers and render thread to core 2 (mask 0x4) and leaves the main thread free to
+// run anywhere; placed on core 2 while cores 0 and 1 were busy, the main thread then spun there for a worker that
+// could run nowhere else. Horizon keeps a thread on its ideal core and migrates it when a core-bound thread needs
+// the one it borrowed; the choice here and the migration below (core_must_move) stand in for that.
+static int core_pick_free(const RtThread *t, int except) {
+    int best = -1, best_pinned = 0;
+    for (int i = 0; i < NCORE; i++) {
+        if (i == except || !core_allowed(t, i) || g_core_owner[i]) continue;
+        int pinned = 0;
+        for (const RtThread *p = g_all; p; p = p->all)
+            if (p != t && p->started && !p->exited && p->mask == (1ull << i)) pinned++;
+        if (best < 0 || pinned < best_pinned) {
+            best = i;
+            best_pinned = pinned;
+        }
+    }
+    return best;
+}
+
+// Whether t, on core c, should move to a free core for a waiter that may run on c and on no free core (which it would
+// have taken): priorities aside, as Horizon's scheduler moves a thread off a core another one is bound to.
+static int core_must_move(const RtThread *t, int c) {
+    int wanted = 0;
+    for (const RtThread *w = g_core_wait; w && !wanted; w = w->cnext) wanted = core_allowed(w, c);
+    return wanted && core_pick_free(t, c) >= 0;
+}
+
 // Whether a waiter better than t may run on core c.
 static int core_better_waiter(const RtThread *t, int c) {
     int tp = prio_of(t);
@@ -894,6 +1029,9 @@ static void core_kick(void) {
             RtThread *b = v < 0 ? NULL : g_core_owner[v];
             if (!b || op[i] > op[v] || (op[i] == op[v] && o->preempt && !b->preempt)) v = i;
         }
+        if (v < 0)   // no worse holder: a holder that can move to a free core gives way all the same (core_must_move)
+            for (int i = 0; i < NCORE && v < 0; i++)
+                if (!(claimed >> i & 1) && core_allowed(w[k], i) && g_core_owner[i] && core_pick_free(g_core_owner[i], i) >= 0) v = i;
         if (v < 0) continue;
         claimed |= 1 << v;
         RtThread *o = g_core_owner[v];
@@ -921,8 +1059,7 @@ static void core_take(RtThread *t) {
     if (!(t->mask & ((1u << NCORE) - 1)))
         rt_fatal("kernel: thread %#x core mask %#llx has no application core", t->handle, (unsigned long long)t->mask);
     int c = t->core >= 0 && t->core < NCORE && core_allowed(t, t->core) && !g_core_owner[t->core] ? t->core : -1;
-    for (int i = 0; c < 0 && i < NCORE; i++)
-        if (core_allowed(t, i) && !g_core_owner[i]) c = i;
+    if (c < 0) c = core_pick_free(t, -1);
     if (c >= 0) {
         t->cur_core = c;
         g_core_owner[c] = t;
@@ -1058,7 +1195,7 @@ void kern_checkpoint(void) {
         t->dg_pc = t->cur->pc;
         t->dg_lr = t->cur->x[30];
     }
-    int better = t->cur_core >= 0 && core_better_waiter(t, t->cur_core);
+    int better = t->cur_core >= 0 && (core_better_waiter(t, t->cur_core) || core_must_move(t, t->cur_core));
     if (better && ap_disabled(t)) {   // preemption disabled: the switch comes at SVC 0x36
         ap_tlr(t)[1] = 1;
         t->preempt = 0;
@@ -1083,7 +1220,8 @@ void kern_ap_yield(void) {
     RtThread *t = tcur;
     lock();
     t->ap_pending = 0;
-    if (t->preempt && t->cur_core >= 0 && !ap_disabled(t) && core_better_waiter(t, t->cur_core)) {
+    if (t->preempt && t->cur_core >= 0 && !ap_disabled(t) &&
+        (core_better_waiter(t, t->cur_core) || core_must_move(t, t->cur_core))) {
         if (g_diag > 0) {
             t->dg_pc = t->cur->pc;
             t->dg_lr = t->cur->x[30];
@@ -1098,7 +1236,7 @@ void kern_ap_yield(void) {
 // SVC 0x36 SynchronizePreemptionState: a preemption deferred by disable_count happens here.
 static void ap_sync(RtThread *t) {
     lock();
-    if (g_ap > 0 && t->cur_core >= 0 && core_better_waiter(t, t->cur_core)) {
+    if (g_ap > 0 && t->cur_core >= 0 && (core_better_waiter(t, t->cur_core) || core_must_move(t, t->cur_core))) {
         core_put(t);
         core_take(t);
     }
