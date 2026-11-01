@@ -103,7 +103,9 @@ and the title, in the order found:
   that only installs the translator, and the language table. A dev-mode install from the dumps into a fresh folder
   runs to a playable `fe3h.exe` (extract 194 s, lift 17 s, compile 11 min, of which the largest generated chunk alone
   is most); the release folder (450 MB, 126 MB zipped) assembles with its content check clean, and `--prove` builds
-  the game from it with nothing but its own Python, llvm-mingw, runtime library and tools, and passes the probes.
+  the game from it with nothing but its own Python, llvm-mingw, runtime library and tools (the lift included, after a
+  first release run failed on a tools module left out of the bundle), and passes the probes. The zip, unpacked on
+  the user's desktop, installed from their dumps to a playable game (2026-11-01).
 
 Next: the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every
