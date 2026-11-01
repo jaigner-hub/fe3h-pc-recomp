@@ -39,9 +39,20 @@ and the title, in the order found:
   by id alone, so the 3D renderer's registrations replaced the menu's. Texture and sampler ids are now slots of their
   pool (`nvn_api_obj.c` `nvn_tpool_slot`, `vk_exec_draw.c` `pool_handle`); TotK, with one pool of each kind, is unchanged.
 
-Next: loading is still about three times slower than hardware; the opening movie (`nn::movie` over the host decoder)
-and leaving the title with a button press are untested; the lifter passes the differential tests on `main`
-(`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled.
+- No music, no voices, only sound effects (first noticed in the opening movie of a new game, whose video plays through
+  the host VP9 decoder as TotK's do). FE3H decodes its streams with the SDK's software `OpusMultiStreamDecoder`
+  (lifted; it never touches `hwopus`) into PCM wave buffers of one renderer voice. Three things in the TotK host's
+  audio renderer lost them, all shapes TotK's own audio never produced: (1) the server voice was looked up by a
+  record's id field, and this game's SDK 6.5 client leaves the id of every unused record at 0, so each update reset
+  voice 0 right after starting it; (2) the channel resources likewise, which zeroed the left channel's send gains;
+  the DSP keeps both by record position (`audren.c` `update_voice`, `request_update`). (3) The music submix reaches
+  the final mix through a splitter, and the fold order ranked a splitter-routed mix by its (absent) destination mix,
+  folding it after the mix it feeds (`audio_mixer.c` `mix_depth`). `FE3H_TRACE=audio` now logs the voices, the mix
+  routing with the splitters and the Opus decoder's calls (`ov_fe3h.c`).
+
+Next: loading is still about three times slower than hardware; the lifter passes the differential tests on `main`
+(`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every
+stream.
 
 ## Shared core
 

@@ -11,8 +11,9 @@ the record of what was found.
 
 ## Status
 
-The game boots to its title screen: logos, the title with "Press any button", and the opening movie starts after
-idling there. Nothing past the title has been tried. Loading is about three times slower than on the console.
+The game boots to its title screen, its menus work, and a new game runs through the opening movie into the first
+chapter, with music, voices and sound effects. Nothing further in has been tried. Loading is about three times slower
+than on the console.
 
 Version 1.1.1 is the target; it is the latest update available to the author.
 

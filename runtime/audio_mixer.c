@@ -233,6 +233,78 @@ static void output_push(Mixer *m, const float *lr, int frames) {
     if (!m->device_ok) atomic_store(&m->rd, wr + (uint64_t)frames);   // no device: the ring only keeps the latest frames
 }
 
+// With the level line: every voice the client has in use, so a voice that plays without being heard shows its shape
+// (format, channels, rate, volume, destination, queued buffers, samples played) next to the silence.
+static void voices_note(AudioRenderer *r) {
+    static const char *const states[] = {"stopped", "started", "paused", "stopping"};
+    for (int i = 0; i < r->param.voice_count; i++) {
+        const ServerVoice *v = &r->voices[i];
+        if (!v->in.in_use) continue;
+        int valid = 0;
+        for (int k = 0; k < 4; k++) valid += v->valid[k] != 0;
+        rt_log("audio: voice %d %s fmt %u ch %u rate %u pitch %.2f vol %.2f mix %d splitter %u buffers %d (slot %u, offset %llu) played %llu consumed %u drops %u",
+               i, states[v->state & 3], v->in.sample_format, v->in.channel_count, v->in.sample_rate, v->in.pitch, v->in.volume,
+               v->in.mix_id, v->in.splitter_id, valid, v->index, (unsigned long long)v->offset, (unsigned long long)v->played,
+               v->consumed, v->drops);
+    }
+}
+
+// With the voices: the route from each voice to the sink. Each in-use mix with its volume, destination and matrix,
+// each effect, the device sink's inputs, and each playing voice's channel send gains.
+static void routing_note(AudioRenderer *r) {
+    Mixer *m = r->mixer;
+    const int mc = r->param.submix_count + 1;
+    for (int i = 0; i < mc; i++) {
+        const AudrenMixIn *x = &r->mixes[i];
+        if (!x->in_use) continue;
+        char gains[160] = "";
+        int n = 0, dst = x->dest_mix_id >= 0 && x->dest_mix_id < mc ? r->mixes[x->dest_mix_id].buffer_count : 0;
+        for (int c = 0; c < x->buffer_count && c < 24; c++)
+            for (int b = 0; b < dst && b < 24; b++)
+                if (x->mix[c][b] != 0 && n < (int)sizeof gains - 24)
+                    n += snprintf(gains + n, sizeof gains - (size_t)n, " %d>%d:%.2f", c, b, x->mix[c][b]);
+        rt_log("audio: mix %d: %d buffers, vol %.2f, dest mix %d splitter %u, gains%s", i, x->buffer_count, x->volume,
+               x->dest_mix_id, x->dest_splitter_id, n ? gains : " none");
+    }
+    for (int i = 0; i < m->nsplit; i++) {
+        const SplitInfo *s = &m->split[i];
+        for (int k = 0; k < s->ndest; k++) {
+            const SplitDest *d = &m->dest[s->ids[k]];
+            char vols[160] = "";
+            int n = 0;
+            for (int b = 0; b < 24; b++)
+                if (d->vol[b] != 0 && n < (int)sizeof vols - 16) n += snprintf(vols + n, sizeof vols - (size_t)n, " %d:%.2f", b, d->vol[b]);
+            rt_log("audio: splitter %d destination %d (id %d): %s, mix %d, vols%s", i, k, s->ids[k], d->used ? "used" : "unused",
+                   d->dest, n ? vols : " none");
+        }
+    }
+    for (int i = 0; i < r->param.effect_count; i++) {
+        const AudrenEffectIn *e = &r->effects[i];
+        if (e->type) rt_log("audio: effect %d: type %u on mix %d, %s, order %d", i, e->type, e->mix_id, e->enabled ? "enabled" : "disabled", e->order);
+    }
+    for (int i = 0; i < r->param.sink_count; i++) {
+        const AudrenSinkIn *k = &r->sinks[i];
+        if (k->in_use)
+            rt_log("audio: sink %d: type %u, %u inputs [%d %d %d %d %d %d]", i, k->type, k->input_count, k->inputs[0], k->inputs[1],
+                   k->inputs[2], k->inputs[3], k->inputs[4], k->inputs[5]);
+    }
+    for (int i = 0; i < r->param.voice_count; i++) {
+        const ServerVoice *v = &r->voices[i];
+        if (!v->in.in_use || v->state != SV_STARTED || v->in.splitter_id != SPLITTER_UNUSED) continue;
+        char sends[200] = "";
+        int n = 0, dst = v->in.mix_id >= 0 && v->in.mix_id < mc ? r->mixes[v->in.mix_id].buffer_count : 0;
+        for (unsigned c = 0; c < v->in.channel_count && c < 6; c++) {
+            int32_t id = v->in.channel_ids[c];
+            if (id < 0 || id >= r->param.voice_count * 6) continue;
+            for (int b = 0; b < dst && b < 24; b++)
+                if (r->channels[id].mix[b] != 0 && n < (int)sizeof sends - 24)
+                    n += snprintf(sends + n, sizeof sends - (size_t)n, " %u>%d:%.2f", c, b, r->channels[id].mix[b]);
+        }
+        rt_log("audio: voice %d sends to mix %d (channel ids %d %d):%s", i, v->in.mix_id, v->in.channel_ids[0], v->in.channel_ids[1], n ? sends : " none");
+    }
+    (void)m;
+}
+
 // Level meter (FE3H_TRACE=audio): one line per 5 s of output, and the first nonzero frame.
 static void level_note(AudioRenderer *r, Mixer *m, const float *lr, int frames) {
     if (!(rt_trace & RT_TRACE_AUDIO)) return;
@@ -260,6 +332,8 @@ static void level_note(AudioRenderer *r, Mixer *m, const float *lr, int frames) 
                queued * 1000.0 / r->param.sample_rate, (unsigned long long)atomic_load(&m->skipped_frames));
         m->level_sum = m->level_peak = 0;
         m->level_count = m->level_frames = 0;
+        voices_note(r);
+        routing_note(r);
     }
 }
 
@@ -528,14 +602,29 @@ static void accumulate(Mixer *m, int buffer, const float *src, float vol, int fr
     float *d = mixbuf(m, buffer); for (int k = 0; k < frames; k++) d[k] += src[k] * vol;
 }
 static int mix_valid(AudioRenderer *r, int32_t id) { return id >= 0 && id <= r->param.submix_count && r->mixes[id].in_use; }
-static int mix_depth(AudioRenderer *r, int id) {
-    int d = 0;
-    for (int guard = 0; id > 0 && guard < 64; guard++, d++) {
-        if (!mix_valid(r, r->mixes[id].dest_mix_id)) return d + 1;
-        id = r->mixes[id].dest_mix_id;
+/* Hops from a submix to the final mix, through its destination mix or, for a mix routed through a splitter, the
+   deepest of the splitter's used destinations (the DSP orders mixes by a dependency graph with the splitter edges,
+   Ryujinx MixContext.Sort). By the destination mix alone, FE3H's music submix (mix 10 -> splitter 0 -> mix 7 -> 8 ->
+   3 -> 9 -> 0) read as depth 1 and was folded after mix 7, into buffers already consumed that frame: silence. */
+static int mix_depth_from(AudioRenderer *r, int id, int guard) {
+    if (id <= 0 || guard > 64) return 0;
+    const AudrenMixIn *x = &r->mixes[id];
+    Mixer *m = r->mixer;
+    if (x->dest_splitter_id != SPLITTER_UNUSED && x->dest_splitter_id < (uint32_t)m->nsplit) {
+        const SplitInfo *s = &m->split[x->dest_splitter_id];
+        int best = 0;
+        for (int k = 0; k < s->ndest; k++) {
+            const SplitDest *d = &m->dest[s->ids[k]];
+            if (!d->used || !mix_valid(r, d->dest)) continue;
+            int depth = 1 + mix_depth_from(r, d->dest, guard + 1);
+            if (depth > best) best = depth;
+        }
+        return best ? best : 1;
     }
-    return d;
+    if (!mix_valid(r, x->dest_mix_id)) return 1;
+    return 1 + mix_depth_from(r, x->dest_mix_id, guard + 1);
 }
+static int mix_depth(AudioRenderer *r, int id) { return mix_depth_from(r, id, 0); }
 
 /* Guest custom effects exchange int32 samples in two rings. Each ring has CPU and DSP
    0x40-byte headers followed by samples; only the DSP header's owned cursor is advanced. */

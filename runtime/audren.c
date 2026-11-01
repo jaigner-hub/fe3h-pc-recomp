@@ -89,9 +89,16 @@ static void voice_reset(ServerVoice *v) {
     memset(v->biquad_state, 0, sizeof v->biquad_state);
 }
 
-static void update_voice(AudioRenderer *r, const AudrenVoiceIn *in) {
-    need(in->id < (uint32_t)r->param.voice_count, "voice id out of range");
-    ServerVoice *v = &r->voices[in->id];
+// Record i of the update is server voice i, as in the DSP (Ryujinx VoiceInfoUpdater.UpdateVoices takes voice state i
+// for parameter i): the id field only names the voice in the records. FE3H's SDK 6.5 client leaves the id of an
+// unused record at 0, so looking the voice up by id made every unused record reset voice 0 right after its own record
+// had started it; its music stream (voice 0) never played while the effects (voices 1..4) did.
+static void update_voice(AudioRenderer *r, int i, const AudrenVoiceIn *in) {
+    ServerVoice *v = &r->voices[i];
+    if (in->in_use && in->id != (uint32_t)i && !r->voice_id_reported) {
+        r->voice_id_reported = 1;
+        rt_log("audren: voice record %d in use carries id %u", i, in->id);
+    }
     if (in->is_new || !in->in_use) voice_reset(v);
     v->in = *in;
     v->use_float_biquads = 0;
@@ -99,14 +106,26 @@ static void update_voice(AudioRenderer *r, const AudrenVoiceIn *in) {
     need(in->wave_buffer_index < 4, "wave buffer index");
     // The play state as the DSP keeps it (Ryujinx VoiceInfo.UpdatePlayState): Stop on a voice that is not stopped
     // becomes Stopping, which the next render frame turns into Stopped after giving back every queued buffer.
+    uint8_t was = v->state;
     if (in->play_state == PLAY_STARTED) v->state = SV_STARTED;
     else if (in->play_state == PLAY_PAUSED) v->state = SV_PAUSED;
     else if (v->state != SV_STOPPED) v->state = SV_STOPPING;
+    // FE3H_TRACE=audio: every state change and, for a PCM voice (a stream decoded by the game), every new buffer.
+    const int traced = (rt_trace & RT_TRACE_AUDIO) != 0;
+    if (traced && was != v->state) {
+        static const char *const states[] = {"stopped", "started", "paused", "stopping"};
+        rt_log("audren: voice %u %s -> %s (new %u, play state %u): fmt %u ch %u rate %u pitch %.2f vol %.2f mix %d splitter %u buffer index %u",
+               in->id, states[was & 3], states[v->state & 3], in->is_new, in->play_state, in->sample_format, in->channel_count,
+               in->sample_rate, in->pitch, in->volume, in->mix_id, in->splitter_id, in->wave_buffer_index);
+    }
     for (unsigned i = 0; i < 4; i++) {   // a new buffer waits until a render frame finds the voice playing
         const AudrenWaveBuffer *w = &in->wave_buffers[i];
         if (!w->sent) {
             v->buffers[i] = *w;
             v->pending[i] = 1;
+            if (traced && in->sample_format != FMT_ADPCM)
+                rt_log("audren: voice %u buffer %u: %#llx+%llu samples %u..%u loop %u eos %u", in->id, i,
+                       (unsigned long long)w->address, (unsigned long long)w->size, w->start, w->end, w->loop, w->end_of_stream);
         }
     }
     v->flush += in->flush_wave_buffer_count;
@@ -232,9 +251,16 @@ static void request_update(AudioRenderer *r, const uint8_t *input, uint64_t in_s
     take(&in, h.render_info, "render info");
     need(in.p == in.end, "unconsumed update input");
 
+    // Record i is channel resource i (Ryujinx VoiceInfoUpdater.UpdateVoiceChannelResources: resource i from
+    // parameter i); the id field only names it. As with the voices (update_voice), FE3H leaves the id of an unused
+    // record at 0, which by id overwrote channel 0's send gains with zeros: the left channel of its music stream.
     for (uint32_t i = 0; i < h.voice_resources / sizeof(AudrenChannelIn); i++) {
-        need(chans[i].id < (uint32_t)vc * 6, "channel resource id");
-        r->channels[chans[i].id] = chans[i];
+        need(i < (uint32_t)vc * 6, "channel resource count");
+        if (chans[i].in_use && chans[i].id != i && !r->channel_id_reported) {
+            r->channel_id_reported = 1;
+            rt_log("audren: channel resource record %u in use carries id %u", i, chans[i].id);
+        }
+        r->channels[i] = chans[i];
     }
     for (int i = 0; i < vc; i++) {
         AudrenVoiceIn v;
@@ -253,8 +279,8 @@ static void request_update(AudioRenderer *r, const uint8_t *input, uint64_t in_s
             }
         } else
             memcpy(&v, voices + i * voice_stride, sizeof v);
-        update_voice(r, &v);
-        ServerVoice *server = &r->voices[v.id];
+        update_voice(r, i, &v);
+        ServerVoice *server = &r->voices[i];
         server->use_float_biquads = (uint8_t)float_voices;
         if (float_voices) memcpy(server->float_biquads, v2.biquads, sizeof v2.biquads);
     }

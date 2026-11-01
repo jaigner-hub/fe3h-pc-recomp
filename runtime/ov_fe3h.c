@@ -4,6 +4,7 @@
 //
 // Each entry names the FE3H call that needs it. The pattern follows totk-pc-recomp runtime/ov_system.c: the SDK
 // function is replaced by symbol (host.h HOST_OVERRIDE), so the service behind it is never opened.
+#include <stdio.h>
 #include <string.h>
 
 #include "host.h"
@@ -113,3 +114,89 @@ HOST_OVERRIDE("_ZN2nn7account36EnsureNetworkServiceAccountAvailableERKNS0_10User
 HOST_OVERRIDE("_ZN2nn7account26GetNetworkServiceAccountIdEPNS0_23NetworkServiceAccountIdERKNS0_10UserHandleE", ov_nsa_fail);
 HOST_OVERRIDE("_ZN2nn7account37LoadNetworkServiceAccountIdTokenCacheEPmPcmRKNS0_10UserHandleE", ov_nsa_fail);
 HOST_OVERRIDE("_ZN2nn7account44EnsureNetworkServiceAccountIdTokenCacheAsyncEPNS0_12AsyncContextERKNS0_10UserHandleE", ov_nsa_fail);
+
+// ==== nn::codec Opus multistream: FE3H's sound engine (KTSL) streams its music and movie sound as Opus and imports
+// both decoders, the software OpusMultiStreamDecoder (SDK code, runs lifted) and the HardwareOpusMultiStreamDecoder
+// (which would open hwopus, a service the host does not serve). Which one it builds, and the stream layout it asks
+// for, shows under FE3H_TRACE=audio; the calls themselves run the SDK's code (observers, host.h HOST_OBSERVER).
+static void obs_opus_size(Cpu *c, const char *which) {
+    uint64_t rate = arg_x(c, 0), ch = arg_x(c, 1), total = arg_x(c, 2), stereo = arg_x(c, 3);
+    uint64_t n = rt_original(c);
+    if (rt_trace & RT_TRACE_AUDIO)
+        rt_log("codec: %s Opus multistream work buffer for %llu Hz, %llu channels, %llu streams (%llu stereo): %llu bytes",
+               which, (unsigned long long)rate, (unsigned long long)ch, (unsigned long long)total,
+               (unsigned long long)stereo, (unsigned long long)n);
+}
+static void obs_opus_sw_size(Cpu *c) { obs_opus_size(c, "software"); }
+static void obs_opus_hw_size(Cpu *c) { obs_opus_size(c, "hardware"); }
+static void obs_opus_sw_ctor(Cpu *c) {
+    uint64_t self = arg_x(c, 0);
+    rt_original(c);
+    if (rt_trace & RT_TRACE_AUDIO) rt_log("codec: software Opus multistream decoder %#llx constructed", (unsigned long long)self);
+}
+static void obs_opus_hw_ctor(Cpu *c) {
+    uint64_t self = arg_x(c, 0), prio = arg_x(c, 1);
+    rt_original(c);
+    if (rt_trace & RT_TRACE_AUDIO)
+        rt_log("codec: hardware Opus multistream decoder %#llx constructed (priority %llu)", (unsigned long long)self,
+               (unsigned long long)prio);
+}
+
+HOST_OBSERVER("_ZN2nn5codec39GetOpusMultiStreamDecoderWorkBufferSizeEiiii", obs_opus_sw_size);
+HOST_OBSERVER("_ZN2nn5codec47GetHardwareOpusMultiStreamDecoderWorkBufferSizeEiiii", obs_opus_hw_size);
+HOST_OBSERVER("_ZN2nn5codec22OpusMultiStreamDecoderC1Ev", obs_opus_sw_ctor);
+HOST_OBSERVER("_ZN2nn5codec30HardwareOpusMultiStreamDecoderC1Ei", obs_opus_hw_ctor);
+
+// OpusMultiStreamDecoder::Initialize(rate, channels, totalStreams, stereoStreams, mapping, work, workSize) is reached
+// through the decoder's vtable (an ABS64 relocation of the symbol, which the override replaces); the SDK's code runs
+// through ldr_symbol. Its result: 0, 0xb (a mapping entry not below totalStreams + stereoStreams) or 8 (libopus
+// opus_multistream_decoder_init failed).
+static void ov_opus_sw_init(Cpu *c) {
+    static uint64_t orig;
+    if (!orig) {
+        orig = ldr_symbol("_ZN2nn5codec22OpusMultiStreamDecoder10InitializeEiiiiPKhPvm");
+        if (!orig) rt_fatal("codec: OpusMultiStreamDecoder::Initialize has no guest definition");
+    }
+    uint64_t a[8];
+    memcpy(a, c->x, sizeof a);
+    char map[64] = "";
+    int ch = (int)(a[2] & 0xffffffff), n = 0;
+    for (int i = 0; i < ch && i < 8 && a[5]; i++) n += snprintf(map + n, sizeof map - (size_t)n, "%s%u", i ? "," : "", *(uint8_t *)(uintptr_t)(a[5] + (uint64_t)i));
+    uint64_t r = rt_call(c, orig, 8, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+    if (rt_trace & RT_TRACE_AUDIO)
+        rt_log("codec: software Opus multistream decoder %#llx Initialize(%llu Hz, %d channels, %llu streams, %llu stereo, mapping [%s], work %#llx+%llu) -> %#llx",
+               (unsigned long long)a[0], (unsigned long long)a[1], ch, (unsigned long long)a[3], (unsigned long long)a[4], map,
+               (unsigned long long)a[6], (unsigned long long)a[7], (unsigned long long)r);
+    ret_x(c, r);
+}
+
+HOST_OVERRIDE("_ZN2nn5codec22OpusMultiStreamDecoder10InitializeEiiiiPKhPvm", ov_opus_sw_init);
+
+// OpusMultiStreamDecoder::DecodeInterleaved(size_t *consumed, int *samples, int16_t *out, size_t outSize, const void *in,
+// size_t inSize), also through the vtable. The first calls and then every 500th are logged, with the result.
+static void ov_opus_sw_decode(Cpu *c) {
+    static uint64_t orig, calls;
+    if (!orig) {
+        orig = ldr_symbol("_ZN2nn5codec22OpusMultiStreamDecoder17DecodeInterleavedEPmPiPsmPKvm");
+        if (!orig) rt_fatal("codec: OpusMultiStreamDecoder::DecodeInterleaved has no guest definition");
+    }
+    uint64_t a[8];
+    memcpy(a, c->x, sizeof a);
+    uint64_t r = rt_call(c, orig, 8, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+    uint64_t n = ++calls;
+    if ((rt_trace & RT_TRACE_AUDIO) && (n <= 5 || n % 500 == 0 || r)) {
+        uint64_t consumed = a[1] ? *(uint64_t *)(uintptr_t)a[1] : 0;
+        int samples = a[2] ? *(int32_t *)(uintptr_t)a[2] : 0, peak = 0;
+        const int16_t *out = (const int16_t *)(uintptr_t)a[3];
+        for (int i = 0; out && i < samples * 2 && (uint64_t)i * 2 < a[4]; i++) {   // stereo, the layout the game uses
+            int v = out[i] < 0 ? -out[i] : out[i];
+            if (v > peak) peak = v;
+        }
+        rt_log("codec: decoder %#llx DecodeInterleaved call %llu: %llu bytes in -> %d samples (peak %d), %llu consumed, out capacity %llu -> %#llx",
+               (unsigned long long)a[0], (unsigned long long)n, (unsigned long long)a[6], samples, peak, (unsigned long long)consumed,
+               (unsigned long long)a[4], (unsigned long long)r);
+    }
+    ret_x(c, r);
+}
+
+HOST_OVERRIDE("_ZN2nn5codec22OpusMultiStreamDecoder17DecodeInterleavedEPmPiPsmPKvm", ov_opus_sw_decode);

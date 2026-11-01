@@ -159,6 +159,7 @@ typedef struct AudioRenderer {
     uint64_t behavior_flags, elapsed_frames;
     uint64_t stop_released, empty_played, flushed, logged_released;
     ServerVoice *voices;
+    uint8_t voice_id_reported, channel_id_reported;     // audren.c update_voice: an in-use record whose id is not its position, logged once
     AudrenPoolIn *pools;
     AudrenMixIn *mixes;
     AudrenSinkIn *sinks;
