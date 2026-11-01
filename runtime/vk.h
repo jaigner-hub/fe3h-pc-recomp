@@ -82,7 +82,9 @@ void vk_device_fault_report(VkResult r);
 // twice, when the command processor reaches it and when all work before it has finished. After a lost device the two
 // codes bracket the work that hung. Without the extension every call returns at once.
 enum { VK_CRUMB_SUBMIT = 1, VK_CRUMB_SUBMIT_END, VK_CRUMB_UPLOAD, VK_CRUMB_UPLOAD_END, VK_CRUMB_ASTC, VK_CRUMB_PRESENT,
-       VK_CRUMB_PRESENT_END };
+       VK_CRUMB_PRESENT_END, VK_CRUMB_OP };
+int vk_crumbs_ops(void);                                // FE3H_CRUMBS=ops: a crumb before every draw and dispatch
+void vk_crumb_op(VkCommandBuffer cb, const char *desc);   // that crumb, with what the op is (kept for the report)
 void vk_crumbs_init(VkCtx *c);       // after the allocator exists
 void vk_crumbs_release(void);
 // Records crumb kind with number n (a timeline value, a batch number; the low 28 bits are kept) into cb. Only the

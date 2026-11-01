@@ -7,7 +7,9 @@
 // writes per crumb, and crumbs mark submissions, upload batches, ASTC chunks and presents, not draws.
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
+#include "cfg.h"
 #include "host.h"
 #include "vk.h"
 
@@ -41,6 +43,28 @@ void vk_crumbs_release(void) {
     buf = VK_NULL_HANDLE, alloc = NULL, words = NULL, write_marker = NULL;
 }
 
+// FE3H_CRUMBS=ops: a crumb before every draw and dispatch, each with a line saying what it was, so a device loss names
+// the op the GPU was in (two marker writes per op: for finding a fault, not for play).
+#define OP_RING 1024
+static int ops_on = -1;
+static uint64_t op_serial;
+static char op_desc[OP_RING][160];
+
+int vk_crumbs_ops(void) {
+    if (ops_on < 0) {
+        const char *e = cfg_get("FE3H_CRUMBS");
+        ops_on = e && !strcmp(e, "ops") && write_marker != NULL;
+        if (ops_on) rt_log("vk: FE3H_CRUMBS=ops: a breadcrumb before every draw and dispatch");
+    }
+    return ops_on;
+}
+
+void vk_crumb_op(VkCommandBuffer cb, const char *desc) {
+    uint64_t n = ++op_serial;
+    snprintf(op_desc[n % OP_RING], sizeof op_desc[0], "%s", desc);
+    vk_crumb(cb, VK_CRUMB_OP, n);
+}
+
 void vk_crumb(VkCommandBuffer cb, int kind, uint64_t n) {
     if (!write_marker || !cb) return;
     uint32_t code = (uint32_t)kind << 28 | (uint32_t)(n & 0x0fffffff);
@@ -55,13 +79,16 @@ static void describe(uint32_t code, char *o, size_t size) {
                                         "the end of present"};
     unsigned k = code >> 28;
     if (!code) snprintf(o, size, "nothing yet");
-    else if (k < sizeof kinds / sizeof *kinds) snprintf(o, size, "%s %u", kinds[k], code & 0x0fffffff);
+    else if (k == VK_CRUMB_OP) {
+        uint32_t n = code & 0x0fffffff;
+        snprintf(o, size, "op %u (%s)", n, op_serial - n < OP_RING ? op_desc[n % OP_RING] : "description no longer kept");
+    } else if (k < sizeof kinds / sizeof *kinds) snprintf(o, size, "%s %u", kinds[k], code & 0x0fffffff);
     else snprintf(o, size, "unknown code %#x", code);
 }
 
 void vk_crumbs_report(void) {
     if (!words) return;
-    char reached[96], finished[96];
+    char reached[256], finished[256];
     describe(words[0], reached, sizeof reached);
     describe(words[1], finished, sizeof finished);
     rt_log("vk: GPU breadcrumbs: the GPU last reached %s; everything before %s had finished", reached, finished);

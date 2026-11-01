@@ -69,6 +69,10 @@ and the title, in the order found:
   the pool buffer like its indexed sibling (`nvn_api_cmd.c`, `vk_exec_draw.c`). The NVN and Vulkan probes
   (`--probe-nvn`, `--probe-vkexec`) run again here: the parts that need TotK's shader census now skip by name.
 
+- Open: a GPU fault in battle (`vkQueueSubmit2` failed with device lost; the driver's fault record says an invalid
+  write at address 0) some way into the first battle, with no host warning before it. `FE3H_CRUMBS=ops` writes a GPU
+  breadcrumb before every draw and dispatch with a line saying what it was, so the loss names the op (`vk_crumbs.c`).
+
 Next: loading is still about three times slower than hardware; the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every
 stream.

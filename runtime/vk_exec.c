@@ -870,6 +870,13 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
         case OP_DRAW_IND:
             if (h->op == OP_DRAW || h->op == OP_DRAW_IDX || h->op == OP_DRAW_IDX_IND || h->op == OP_DRAW_IND) vk_exec_frame.draws_seen++, split_draws++;
             if (h->op == OP_DISPATCH || h->op == OP_DISPATCH_IND) vk_exec_frame.dispatches++, split_draws++;
+            if (h->op != OP_UPDATE_UB && vk_crumbs_ops() && ex->cb) {   // FE3H_CRUMBS=ops: what a device loss names
+                const uint32_t *w = a;
+                char desc[160];
+                snprintf(desc, sizeof desc, "%s %#x %#x %#x %#x in submission %llu, frame %llu", nvn_op_name(h->op), w[0], w[1], w[2], w[3],
+                         (unsigned long long)vk_sync_issued() + 1, (unsigned long long)gfx_counters.frames);
+                vk_crumb_op(ex->cb, desc);
+            }
         case OP_BIND_PROGRAM: case OP_BIND_STATE: case OP_BIND_VATTR: case OP_BIND_VSTREAM: case OP_BIND_VBUF:
         case OP_BIND_UBO: case OP_BIND_SSBO: case OP_BIND_TEX: case OP_BIND_SAMP: case OP_BIND_IMG:
             vk_exec_op_draw(ex, h->op, a);
