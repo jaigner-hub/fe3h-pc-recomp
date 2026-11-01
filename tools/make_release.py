@@ -19,9 +19,10 @@ cached in toolchain/release-dl/ and checked against the sha256 in PINS; a mismat
     VERSION    the repository's VERSION plus the commit, 0.1.0+973c626; the installer's release string
     FE3H-Setup.exe  installer/launcher/launcher.c built with llvm/ (-mwindows): starts python/pythonw.exe -m installer.gui
 
---prove compiles generated/v262144 and links build/release-check/fe3h.exe with nothing but the folder's python/, llvm/,
-runtime/ and bin/ (PATH holds the Windows system directory and those), then runs the four probes there. It needs a
-generated/v262144 and build/extracted/v121 from the usual game build (they are read, nothing is written to them).
+--prove lifts build/extracted/v262144/exefs with the folder's recomp/ into build/release-check/gen, compiles it and
+links build/release-check/fe3h.exe with nothing but the folder's python/, llvm/, runtime/ and bin/ (PATH holds the
+Windows system directory and those), then runs the four probes there: the lift, compile and link steps of an install.
+It needs build/extracted/v262144 from the usual game build (read only).
 
 The folder contains nothing derived from the game: check_content runs over it before the script finishes. Then the
 folder's own python runs a check-only installer pass (no game files: it must get through the release, toolchain and host
@@ -96,7 +97,7 @@ LLVM_SKIP_SUFFIXES = {'.idl', '.tlb'}
 
 # tools/ files the installer steps run (and what they import), copied from the repo.
 TOOLS_FILES = ['build_game.py', 'build_shaders.py', 'check_content.py', 'extract.py', 'extract_exefs.py',
-               'extract_romfs.py', 'romfs_index.py']
+               'extract_romfs.py', 'hostmem.py', 'romfs_index.py']   # hostmem: gen.py sizes its workers by free RAM
 TOOLS_DIRS = ['data']   # data/: expected hashes
 RUNTIME_SUFFIXES = {'.h', '.inc', '.ico'}   # .ico: the installer window icon
 
@@ -417,11 +418,21 @@ def check_folder(out):
 
 
 def check_bundle(out):
-    """The folder's own python runs the installer without game files and the window's selftest."""
+    """The folder's own python imports every script of recomp/ and tools/, runs the installer without game files and
+    the window's selftest."""
     chk = MAIN_ROOT / 'build' / 'release-check' / 'bundle'
     shutil.rmtree(chk, ignore_errors=True)
     env = clean_env(out / 'python')
     py = out / 'python' / 'python.exe'
+    # Every script the steps run imports its siblings by bare name (python314._pth lists tools/ and recomp/); a module
+    # left out of TOOLS_FILES shows up only when the step runs on the player's machine, so import them all here.
+    modules = sorted(p.stem for d in ('recomp', 'tools') for p in (out / d).glob('*.py'))
+    r = subprocess.run([py, '-I', '-c', 'import importlib, sys; [importlib.import_module(m) for m in sys.argv[1:]]; '
+                        'print("imported", len(sys.argv) - 1, "scripts")', *modules],
+                       cwd=out, env=env, capture_output=True, text=True, timeout=300)
+    if r.returncode:
+        sys.exit(f'bundle check: a script does not import from the folder\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}')
+    print('bundle check:', r.stdout.strip(), ', '.join(modules))
     r = subprocess.run([py, '-m', 'installer', '--lang', 'en-US', '--dest', chk / 'install', '--temp', chk / 'temp'],
                        cwd=out, env=env, capture_output=True, text=True, timeout=600)
     events = [json.loads(line) for line in r.stdout.splitlines() if line.startswith('{')]
@@ -457,12 +468,17 @@ def write_zip(out, path):
 
 
 def prove(out):
-    """Compile generated/v262144 and link fe3h.exe with the folder's tools only, then run the probes next to it."""
+    """Lift build/extracted/v262144/exefs with the folder's recomp/, compile it and link fe3h.exe with the folder's tools
+    only, then run the probes next to it: the lift, compile and link steps of an install, without the installer."""
     out = out.resolve()
-    gen = MAIN_ROOT / 'generated' / 'v262144'
     ext = MAIN_ROOT / 'build' / 'extracted' / 'v262144'
     chk = MAIN_ROOT / 'build' / 'release-check'
+    gen = chk / 'gen'
     env = clean_env(out / 'python', out / 'llvm' / 'bin', out / 'bin')
+    t0 = time.time()
+    run([out / 'python' / 'python.exe', '-I', out / 'recomp' / 'gen.py', '--exefs', ext / 'exefs', '--out', gen,
+         '--modules', 'main,subsdk0,subsdk1,sdk', '--patches', out / 'recomp' / 'patches-v262144.txt'], env=env, cwd=out)
+    print(f'prove: lift {time.time() - t0:.0f} s')
     t0 = time.time()
     run([out / 'python' / 'python.exe', out / 'tools' / 'build_game.py', '--toolchain', out / 'llvm',
          '--deps', out / 'runtime' / 'deps', '--runtime', out / 'runtime', '--runtime-lib', out / 'runtime' / 'libfe3hrt.a',
