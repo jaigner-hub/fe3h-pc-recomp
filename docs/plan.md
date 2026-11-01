@@ -64,6 +64,11 @@ and the title, in the order found:
   stack, the core owners and the present/replay/fence state; `tools/resolve_map.py` turns the host addresses into
   symbols with the linker map.
 
+- The first attack in a battle: fatal, `nvnCommandBufferDrawArraysIndirect` had no implementation (TotK never issued a
+  non-indexed indirect draw; the indexed one existed). Added as `OP_DRAW_IND`, replayed with `vkCmdDrawIndirect` from
+  the pool buffer like its indexed sibling (`nvn_api_cmd.c`, `vk_exec_draw.c`). The NVN and Vulkan probes
+  (`--probe-nvn`, `--probe-vkexec`) run again here: the parts that need TotK's shader census now skip by name.
+
 Next: loading is still about three times slower than hardware; the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every
 stream.

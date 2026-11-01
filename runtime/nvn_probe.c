@@ -457,6 +457,7 @@ static uint64_t record_all(void) {
     REC(OP_DRAW_IDX_IND, CALL(nvnCommandBufferDrawElementsIndirect, U(c), NVN_DRAW_PRIMITIVE_TRIANGLES, NVN_INDEX_TYPE_UNSIGNED_INT,
                               0x8000, 0xc000));
     REC(OP_DISPATCH_IND, CALL(nvnCommandBufferDispatchComputeIndirect, U(c), 0xc100));
+    REC(OP_DRAW_IND, CALL(nvnCommandBufferDrawArraysIndirect, U(c), NVN_DRAW_PRIMITIVE_TRIANGLES, 0xc300));
     REC(OP_CLEAR_BUF, CALL(nvnCommandBufferClearBuffer, U(c), 0xc200, 0x40, 0xdeadbeef));
     REC(OP_CLEAR_BUF, CALL(nvnCommandBufferReportValue, U(c), 0x1234, 0xc300));
     static const int thresholds[4] = {1, 2, 3, 4};
@@ -678,6 +679,11 @@ static void parse_all(uint64_t h) {
             break;
         }
         case OP_DISPATCH_IND: CHECK(((const p_dispatch_ind *)a)->ind == 0xc100, "DISPATCH_IND payload"); break;
+        case OP_DRAW_IND: {
+            const p_draw_ind *p = a;
+            CHECK(p->prim == NVN_DRAW_PRIMITIVE_TRIANGLES && p->ind == 0xc300, "DRAW_IND payload");
+            break;
+        }
         case OP_CLEAR_BUF: {
             const p_clear_buf *p = a;
             CHECK((p->addr == 0xc200 && p->size == 0x40 && p->value == 0xdeadbeef) ||

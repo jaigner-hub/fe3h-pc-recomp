@@ -3294,7 +3294,10 @@ int vk_pipeline_selftest(void) {
     enum { MAXN = 20000, WANT_PAIRS = 64, WANT_CS = 16 };
     char root[MAX_PATH * 2];
     if (!vk_init() || !ensure_init()) { printf("vk_pipeline selftest: FAILED: no Vulkan device\n"); return 1; }
-    if (!census_root(root, sizeof root)) { printf("vk_pipeline selftest: FAILED: build/v121/shaders/jobs.json not found\n"); return 1; }
+    if (!census_root(root, sizeof root)) {   // TotK's shader census (tools/shader_census.py), which FE3H does not carry
+        printf("vk_pipeline selftest: skipped: build/v121/shaders/jobs.json (the TotK census) is not present\n");
+        return 0;
+    }
     size_t size;
     char *jobs = census_read(root, &size);
     CensusEntry *e = malloc(sizeof *e * MAXN);

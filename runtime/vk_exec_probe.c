@@ -132,7 +132,8 @@ static int test_present(const GfxBackend *b, uint8_t *guest, int *w_out, int *h_
     vk_present_capture(1);
     const int crop[4] = {0, 0, TEX_W, TEX_H};
     b->present(&t, crop, 0);
-    b->finish();   // the queued present is submitted and, with capture on, read back
+    b->finish();         // the GPU work so far; a queued present is not part of it (vk_backend.c vk_be_finish)
+    vk_present_drain();  // the present: submitted and, with capture on, read back
     const uint8_t *px;
     int w, h;
     VkFormat fmt;
@@ -397,7 +398,10 @@ static uint8_t *draw_prefix(uint8_t *q, prog_t *prog, const pool_t *pool, tex_t 
 
 static int test_draw(const GfxBackend *b, uint8_t *guest, int *n_drawn, int *n_tries, int *n_cs) {
     char root[MAX_PATH * 2], path[MAX_PATH * 2 + 64];
-    CHECK(dr_root(root, sizeof root), "build/v121/shaders/jobs.json not found");
+    if (!dr_root(root, sizeof root)) {   // TotK's shader census (tools/shader_census.py), which FE3H does not carry
+        printf("probe-vkexec: draw part skipped: build/v121/shaders/jobs.json (the TotK census) is not present\n");
+        return 0;
+    }
     snprintf(path, sizeof path, "%s\\build\\v121\\shaders\\jobs.json", root);
     long size;
     char *jobs = dr_read(path, &size);
