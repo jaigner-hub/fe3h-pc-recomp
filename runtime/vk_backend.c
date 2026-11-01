@@ -371,17 +371,23 @@ static int vk_be_pool_init(pool_t *p) { vk_sync_start(); return vk_pool_init(p);
 // A queued present reads a window texture until the present thread submits it, so a pool holding one is freed only
 // after that. Other pools are freed at once: FE3H's loader makes and frees a pool per resource, and the drain waited
 // for the paced present, up to a frame, each time (loading at one resource a frame).
+// The destruction waits for a submission another thread is recording (vk_sync_exclusive): see vk_sync.c.
 static void vk_be_pool_fini(pool_t *p) {
     vk_sync_start();
     replay_drain(DR_POOL_FINI);
     if (nvn_window_uses_pool(p)) vk_present_drain();
+    vk_sync_exclusive(1);
     vk_pool_fini(p);
+    vk_sync_exclusive(0);
 }
 static int vk_be_pool_map_virtual(pool_t *v, int n, const void *requests) {
     vk_sync_start();
     replay_drain(DR_MAP_VIRTUAL);
     if (nvn_window_uses_pool(v)) vk_present_drain();
-    return vk_pool_map_virtual(v, n, requests);
+    vk_sync_exclusive(1);
+    int r = vk_pool_map_virtual(v, n, requests);
+    vk_sync_exclusive(0);
+    return r;
 }
 static void vk_be_texture_register(int id, const tex_t *t, const view_t *v) { vk_sync_start(); vk_texture_register(id, t, v); }
 static void vk_be_sampler_register(int id, const samp_par *s) { vk_sync_start(); vk_sampler_register(id, s); }

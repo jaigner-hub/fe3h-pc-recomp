@@ -43,8 +43,9 @@ void vk_crumbs_release(void) {
     buf = VK_NULL_HANDLE, alloc = NULL, words = NULL, write_marker = NULL;
 }
 
-// FE3H_CRUMBS=ops: a crumb before every draw and dispatch, each with a line saying what it was, so a device loss names
-// the op the GPU was in (two marker writes per op: for finding a fault, not for play).
+// FE3H_CRUMBS=ops: a crumb at every pass begin and end and before every draw and dispatch outside a pass, each with a
+// line saying what it was, so a device loss names where the GPU was (for finding a fault, not for play). Inside a pass
+// the marker write itself faults on NVIDIA (RTX 4070: the same "invalid write at 0" a lost device reports).
 #define OP_RING 1024
 static int ops_on = -1;
 static uint64_t op_serial;
@@ -54,7 +55,7 @@ int vk_crumbs_ops(void) {
     if (ops_on < 0) {
         const char *e = cfg_get("FE3H_CRUMBS");
         ops_on = e && !strcmp(e, "ops") && write_marker != NULL;
-        if (ops_on) rt_log("vk: FE3H_CRUMBS=ops: a breadcrumb before every draw and dispatch");
+        if (ops_on) rt_log("vk: FE3H_CRUMBS=ops: a breadcrumb at every pass boundary and before draws and dispatches outside a pass");
     }
     return ops_on;
 }

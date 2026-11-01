@@ -331,6 +331,16 @@ uint64_t vk_sync_reserve(void) {
     return v;
 }
 
+// Held by pool finalization and virtual remapping (vk_backend.c): a submission being recorded on another thread names
+// the pool's buffers until it is submitted, and the vkQueueWaitIdle of the finalization covers only submitted work.
+// FE3H's loader threads free a pool per resource while its render thread submits; in battle the GPU then drew into
+// freed memory (an invalid write, the device lost).
+void vk_sync_exclusive(int on) {
+    vk_sync_start();
+    if (on) AcquireSRWLockExclusive(&sub_lock);
+    else ReleaseSRWLockExclusive(&sub_lock);
+}
+
 uint64_t vk_sync_submit(const uint64_t *handles, int n) {
     vk_sync_start();
     VkCtx *c = vk_ctx();

@@ -611,6 +611,12 @@ void vk_exec_pass_begin(VkExec *ex) {
                           .pColorAttachments = ca,
                           .pDepthAttachment = ex->pass_depth ? &da : NULL,
                           .pStencilAttachment = ex->pass_stencil ? &sa : NULL};
+    if (vk_crumbs_ops()) {   // FE3H_CRUMBS=ops: the crumbs stay outside the pass (a marker inside one faults on NVIDIA)
+        char desc[160];
+        snprintf(desc, sizeof desc, "pass begin %ux%u, %d colour targets, depth %d, in submission %llu, frame %llu", ex->pass_w, ex->pass_h,
+                 ex->pass_ncolor, ex->pass_depth != 0, (unsigned long long)vk_sync_issued() + 1, (unsigned long long)gfx_counters.frames);
+        vk_crumb_op(ex->cb, desc);
+    }
     vkCmdBeginRendering(ex->cb, &ri);
     vk_exec_frame.passes++;
     ex->recorded++;
@@ -623,6 +629,7 @@ void vk_exec_pass_end(VkExec *ex) {
     vkCmdEndRendering(ex->cb);
     ex->recorded++;
     ex->in_pass = 0;
+    if (vk_crumbs_ops()) vk_crumb_op(ex->cb, "pass end");
     for (int i = 0; i < ex->pass_ncolor && i < 8; i++)   // stand-ins of 3D BC targets go to their textures
         if (ex->color[i].image && ex->color[i].img && ex->color[i].img->image != ex->color[i].image)
             bc_copy_back(ex, &ex->color[i]);
@@ -870,7 +877,7 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
         case OP_DRAW_IND:
             if (h->op == OP_DRAW || h->op == OP_DRAW_IDX || h->op == OP_DRAW_IDX_IND || h->op == OP_DRAW_IND) vk_exec_frame.draws_seen++, split_draws++;
             if (h->op == OP_DISPATCH || h->op == OP_DISPATCH_IND) vk_exec_frame.dispatches++, split_draws++;
-            if (h->op != OP_UPDATE_UB && vk_crumbs_ops() && ex->cb) {   // FE3H_CRUMBS=ops: what a device loss names
+            if (h->op != OP_UPDATE_UB && !ex->in_pass && vk_crumbs_ops() && ex->cb) {   // FE3H_CRUMBS=ops: what a device loss names
                 const uint32_t *w = a;
                 char desc[160];
                 snprintf(desc, sizeof desc, "%s %#x %#x %#x %#x in submission %llu, frame %llu", nvn_op_name(h->op), w[0], w[1], w[2], w[3],
