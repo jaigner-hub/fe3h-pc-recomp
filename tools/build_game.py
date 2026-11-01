@@ -4,12 +4,12 @@
 Writes build/<version>/build.ninja and runs MSYS2 UCRT64 Ninja on it. Ninja keeps the build incremental: a chunk is
 recompiled only when it, a header it includes or its flags change.
 
-    .venv\\Scripts\\python tools\\build_game.py                     # generated/v262144 -> build/v262144/fe3h.exe
+    .venv\\Scripts\\python tools\\build_game.py                     # generated/v327680 -> build/v327680/fe3h.exe
     .venv\\Scripts\\python tools\\build_game.py --modules subsdk0   # one module (links if it has no calls into others)
     .venv\\Scripts\\python tools\\build_game.py --jobs 8
-    .venv\\Scripts\\python tools\\build_game.py --out build/v262144-t2   # a separate build directory
+    .venv\\Scripts\\python tools\\build_game.py --out build/v327680-t2   # a separate build directory
     .venv\\Scripts\\python tools\\build_game.py --toolchain toolchain/llvm-mingw-<version>/llvm-mingw-<version>-ucrt-x86_64 \\
-        --out build/v262144-llvmmingw                                    # llvm-mingw instead of MSYS2 UCRT64
+        --out build/v327680-llvmmingw                                    # llvm-mingw instead of MSYS2 UCRT64
 
 Every runtime/*.c is compiled. build/<version>/modules.c carries the layout, the linked function tables, the
 expected SHA-256 of each ExeFS file (from build/extracted/<version>/extraction-manifest.json, written by
@@ -98,8 +98,8 @@ WINDRES = UCRT / 'windres.exe'   # runtime/fe3h.rc: the manifest of fe3h.exe
 TOOLCHAIN_BIN = None   # llvm-mingw bin directory, set by main() for --toolchain
 DEPS = None            # the deps directory of an llvm-mingw build
 # Display version of each build version name (the update's version number, as extract_exefs.py names the folder).
-DEFAULT_VERSION = 'v262144'
-DISPLAY_VERSIONS = {'v0': '1.0.0', 'v262144': '1.1.1'}
+DEFAULT_VERSION = 'v327680'
+DISPLAY_VERSIONS = {'v0': '1.0.0', 'v262144': '1.1.1', 'v327680': '1.2.0'}
 
 GiB = 1 << 30
 # Peak commit of one compile, TotK 1.2.1 at -O1 (2026-10-20): 120-180 MiB per ~3 MiB chunk, 568 MiB for main_table.c
@@ -586,7 +586,7 @@ def mib(n):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--version', default=DEFAULT_VERSION, help=f'game version (default {DEFAULT_VERSION}, 1.1.1)')
+    ap.add_argument('--version', default=DEFAULT_VERSION, help=f'game version (default {DEFAULT_VERSION}, {DISPLAY_VERSIONS[DEFAULT_VERSION]})')
     ap.add_argument('--gen', type=Path, help='generated C directory (default generated/<version>)')
     ap.add_argument('--out', type=Path, help='build directory (default build/<version>)')
     ap.add_argument('--modules', help='comma-separated subset of the layout modules (default all)')

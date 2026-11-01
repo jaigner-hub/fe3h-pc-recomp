@@ -30,13 +30,15 @@ from pathlib import Path
 
 EXE = '.exe' if os.name == 'nt' else ''
 UCRT = Path(r'C:\msys64\ucrt64\bin')
-SUPPORTED = ('1.1.1',)   # updates the installer builds; the check identifies the player's by hash (FE3H: 1.1.1 only)
+# Updates the installer builds; the check identifies the player's by hash. 1.2.0 is the target and the tested one;
+# 1.1.1 still installs from its tables (only main differs) but is no longer tested.
+SUPPORTED = ('1.2.0', '1.1.1')
 # FE3H names a version by its CNMT number (tools/extract_exefs.py): the folder of build_game.py and the patch table.
-VERSION_TAGS = {'1.0.0': 'v0', '1.1.1': 'v262144'}
+VERSION_TAGS = {'1.0.0': 'v0', '1.1.1': 'v262144', '1.2.0': 'v327680'}
 
 
 def version_tag(version):
-    """'1.1.1' -> 'v262144': the version name of build_game.py and the patch tables."""
+    """'1.2.0' -> 'v327680': the version name of build_game.py and the patch tables."""
     return VERSION_TAGS[version]
 
 

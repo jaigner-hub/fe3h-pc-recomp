@@ -1,0 +1,9 @@
+# Code patch table for FE3H 1.2.0 (v327680): recomp/gen.py --patches. Format: recomp/patches.py.
+# Module offsets of main; the original word is checked against the game's code by the generator.
+
+# Texture readiness probe (runtime/probe_ready.c), off unless FE3H_READY_PROBE=1. The engine's check at main+0x9c4320
+# asks whether its GPU progress counter has reached the value a resource waits for; the counter read main+0x9ca500
+# returns *(u32 *)(*(obj + 0x10) + 0x48). The probe does that read on the host and logs the counter next to the awaited
+# value (x19). The same site as patches-v262144.txt main+0x989284, found by its surrounding code.
+set ready_probe FE3H_READY_PROBE 0
+site ready_probe main 9c4334 94001873 9460872f   # bl main+0x9ca500 -> page+0xff0

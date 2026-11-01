@@ -1,11 +1,11 @@
-// From totk-pc-recomp runtime/boot.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; FE3H 1.1.1 module list, init_array sizes, main stack, boot checkpoint, and SDK 6.5.0's two-callback nn::init::Start.
+// From totk-pc-recomp runtime/boot.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; FE3H module list, init_array sizes, main stack, per-version boot checkpoint, and SDK 6.5.0's two-callback nn::init::Start.
 // Adapted from MacNativeGames games/totk/runtime/loader.c (lines 456-477) and services.c (lines 219-235) @ b75be8cf
 // (MIT, Copyright (c) 2026 MacNativeGames contributors) and LAS Recomp runtime/main.c (lines 16-35, 141-159) @
 // da35b83 (MIT, Copyright (c) 2026 Peiikai).
 // The boot driver: the guest main thread runs the game's own nn::init::Start
 // with two host callbacks, the second of which runs DT_INIT of main, subsdk0, subsdk1 and sdk; Start then calls
 // nnMain. --boot ends at the first nvnBootstrapLoader call:
-//   nvnBootstrapLoader     called from main+0x79d570 in the graphics bring-up (FE3H 1.1.1), after every module's
+//   nvnBootstrapLoader     called from main+0x79d570 (1.1.1) or main+0x7d8620 (1.2.0) in the graphics bring-up, after every module's
 //                          constructor flag reads 2; logs the run statistics, exits 0
 // TotK also checked nnMain's SetFocusHandlingMode call on the way; FE3H does not import it, so that checkpoint
 // (ov_system.c) never fires here.
@@ -25,13 +25,14 @@
 // _init_libc0, nnosInitialize, loader_ready, _init_libc1, nninitInitializeSdkModule, nninitStartup, _init_libc2,
 // module_inits, nnMain, nninitFinalizeSdkModule, nnosQuickExit. TotK's SDK takes a third callback, module_finis.
 #define SYM_INIT_START "_ZN2nn4init5StartEmmPFvvES2_"
-// main: return address of the first nvnBootstrapLoader call (FE3H 1.1.1, the only bl to its PLT stub). The
-// SetFocusHandlingMode checkpoint keeps TotK 1.2.1's address; FE3H never reaches it.
+// main: return address of the first nvnBootstrapLoader call per game version (rt_game_version, build_game.py), the
+// only bl to its PLT stub; nvn_ret() picks the running version's. The SetFocusHandlingMode checkpoint keeps TotK
+// 1.2.1's address; FE3H never reaches it.
 #define CHECKPOINT_RET 0xe7a954ull
-#define NVN_RET 0x79d574ull
+static const struct { int version; uint64_t ret; } nvn_rets[] = {{111, 0x79d574ull}, {120, 0x7d8624ull}};
 #define CTOR_DONE 2                      // a module's constructor flag after its DT_INIT ran the init_array
 
-// The init_array sizes (DT_INIT_ARRAYSZ / 8 of FE3H 1.1.1), in the order the constructors run. TotK ran main, subsdk0,
+// The init_array sizes (DT_INIT_ARRAYSZ / 8 of FE3H 1.1.1 and 1.2.0, which agree), in the order the constructors run. TotK ran main, subsdk0,
 // sdk; subsdk1 goes after subsdk0 here.
 typedef struct { const char *name; uint64_t entries; } InitCount;
 static const InitCount expected_inits[] = {{"main", 49}, {"subsdk0", 4}, {"subsdk1", 44}, {"sdk", 105}};
@@ -47,10 +48,16 @@ static const RtLoaded *module_named(const char *name) {
 
 static uint32_t ctor_state(const RtLoaded *m) { return LD32(m->ctor_flag); }
 
+static uint64_t nvn_ret(void) {
+    for (unsigned k = 0; k < sizeof nvn_rets / sizeof *nvn_rets; k++)
+        if (nvn_rets[k].version == rt_game_version) return nvn_rets[k].ret;
+    rt_fatal("boot: no first-NVN-call checkpoint for game version %d (boot.c nvn_rets)", rt_game_version);
+}
+
 static const char *caller(const Cpu *c, char *buf, int n) { return ldr_describe(c->x[30] - 4, buf, n); }
 
 // main.npdm META: the main thread's priority (+0xE), core (+0xF) and stack size (+0x1C). kernel.c builds the main
-// thread with FE3H 1.1.1's values; a different npdm means a different game build.
+// thread with FE3H's values (the same in 1.1.1 and 1.2.0); a different npdm means a different game build.
 static void check_npdm(void) {
     size_t n;
     uint8_t *npdm = ldr_read_verified(rt_config()->exefs, "main.npdm", &n);
@@ -116,9 +123,9 @@ void rt_boot_event(const char *what, Cpu *c, const char *detail) {
         return;
     }
     if (!strcmp(what, "nvn")) {
-        if (ret != main_mod->base + NVN_RET)
+        if (ret != main_mod->base + nvn_ret())
             rt_fatal("boot: first NVN call %s(\"%s\") from %s, expected main+%#llx", "nvnBootstrapLoader", detail, at,
-                     (unsigned long long)NVN_RET);
+                     (unsigned long long)nvn_ret());
         if (!InterlockedCompareExchange(&inits_done, 0, 0)) rt_fatal("boot: first NVN call before DT_INIT");
         rt_logf("boot: first NVN call nvnBootstrapLoader(\"%s\") from main+%#llx\n", detail,
                (unsigned long long)(ret - main_mod->base));

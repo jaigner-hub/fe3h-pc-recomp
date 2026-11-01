@@ -544,7 +544,7 @@ def selftest(layout, shots=None):
             tag = lang
             app.vars['dest'].set('Z:/selftest/FE3H')
             app.vars['base'].set('Z:/selftest/fe3h.nsp')
-            app.vars['update'].set('Z:/selftest/fe3h-1.1.1.nsp')
+            app.vars['update'].set('Z:/selftest/fe3h-1.2.0.nsp')
             app.vars['keys'].set('Z:/selftest/prod.keys')
             app.show('form')
             app.start()   # missing files: shows the problems

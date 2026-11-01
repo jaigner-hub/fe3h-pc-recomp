@@ -6,7 +6,7 @@ Answer these from the user's dump before writing any port code. Record answers h
 
 | Question | Answer |
 |---|---|
-| Target update and title ids | Target 1.1.1 (v262144), the latest update the user can obtain; 1.2.0 is not available. Base `010055D009F78000`, update `010055D009F78800` (both read from the dump's CNMT) |
+| Target update and title ids | Target 1.2.0 (v327680), the final update (obtained 2026-11-01; 1.1.1, v262144, was the target until then and only `main` differs between them). Base `010055D009F78000`, update `010055D009F78800` (both read from the dump's CNMT) |
 | ExeFS modules and their sizes | `rtld`, `main`, `subsdk0`, `subsdk1`, `sdk`. One more subsdk than TotK. 1.1.1 changes only `main` (and `main.npdm`); the other four are identical to 1.0.0. Loaded segment sizes in 1.1.1 (text / ro / data / bss, bytes): `main` 11,285,104 / 15,511,840 / 849,032 / 7,531,384; `sdk` 5,359,104 / 6,511,340 / 394,296 / 801,736; `subsdk0` 5,038,848 / 2,880,572 / 907,832 / 9,672; `subsdk1` 3,633,424 / 2,464,580 / 202,040 / 1,166,024; `rtld` 6,640 / 3,344 / 640 / 3,456 |
 | SDK version string in `main` | NintendoSDK 6.5.0 (`nnSdk-6_5_0-Release` in `sdk`; `main` carries the 6.5.0 tags of gfx, libcurl, libz, NintendoWare Font and Ui2d, and NEX 4.6.2). TotK is built on a much newer SDK, so mangled names and service commands may differ |
 | Graphics API: NVN, Vulkan or OpenGL imports | NVN, reached through `nvnBootstrapLoader` as in TotK, plus `nv::InitializeGraphics` and `nv::SetGraphicsAllocator`. Unlike TotK, the game also loads the runtime GLSL compiler: `subsdk0` is `glslc`, and `main` imports `glslcInitialize`, `glslcCompile`, `glslcCompileSpecialized` and related calls, and holds GLSL `#version 430` source fragments. The shaders ship precompiled. Base RomFS 1.0.0 is `DATA0.bin` (index of 31,160 entries: offset, size, compressed size, flag) and `DATA1.bin` (6.9 GB, chunked zlib) plus sound banks and WebM movies. A scan of all 26,350 non-empty entries finds shader code only in 173 KTGL shader packages (`SPKG`, 130 standalone and the rest inside other containers): glslc output with Maxwell code (the `EXIT` encoding is present) and reflection names, no GLSL source except one debug package that also carries its GLSL and NV assembly listing. `main` loads its eight glslc entry points in one place, right after `nvnBootstrapLoader`, and never calls them directly. So the TotK path applies: Maxwell to SPIR-V through the shader translator (`docs/maxwell.md` there) |
@@ -19,6 +19,11 @@ Answer these from the user's dump before writing any port code. Record answers h
 ## Phase 1: boot to the title screen
 
 Lift all modules, link them on the host, bring up the services the game calls, and draw the first frames.
+
+**Target moved to 1.2.0 (2026-11-01, evening):** the user obtained the final update. Only `main` differs from 1.1.1;
+the lifter, patch table (one site, found by its surrounding code) and the boot checkpoint (`runtime/boot.c`, now a
+table by `rt_game_version`) were the version-bound parts. `build/v327680/fe3h.exe` boots to the title screen; the
+rest of the path below was verified on 1.1.1 and is to be re-verified on 1.2.0.
 
 **Reached (2026-11-01):** `fe3h.exe` boots 1.1.1 to the title screen ("PRESS ANY BUTTON", the throne room with its
 light shafts) in about 58 s, and opens the opening movie after idling there. What stood between the first black frames

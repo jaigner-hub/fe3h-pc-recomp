@@ -19,10 +19,10 @@ cached in toolchain/release-dl/ and checked against the sha256 in PINS; a mismat
     VERSION    the repository's VERSION plus the commit, 0.1.0+973c626; the installer's release string
     FE3H-Setup.exe  installer/launcher/launcher.c built with llvm/ (-mwindows): starts python/pythonw.exe -m installer.gui
 
---prove lifts build/extracted/v262144/exefs with the folder's recomp/ into build/release-check/gen, compiles it and
+--prove lifts build/extracted/v327680/exefs with the folder's recomp/ into build/release-check/gen, compiles it and
 links build/release-check/fe3h.exe with nothing but the folder's python/, llvm/, runtime/ and bin/ (PATH holds the
 Windows system directory and those), then runs the four probes there: the lift, compile and link steps of an install.
-It needs build/extracted/v262144 from the usual game build (read only).
+It needs build/extracted/v327680 from the usual game build (read only).
 
 The folder contains nothing derived from the game: check_content runs over it before the script finishes. Then the
 folder's own python runs a check-only installer pass (no game files: it must get through the release, toolchain and host
@@ -327,7 +327,7 @@ def collect_licenses(out):
 def runtime_lib(out, llvm):
     """Build libfe3hrt.a with the folder's llvm/ and copy it, the headers and the install-side sources into runtime/."""
     build = MAIN_ROOT / 'build' / 'release-check' / 'rtlib'
-    gen = MAIN_ROOT / 'generated' / 'v262144'
+    gen = MAIN_ROOT / 'generated' / 'v327680'
     run([sys.executable, ROOT / 'tools' / 'build_game.py', '--make-runtime-lib', '--toolchain', llvm,
          '--deps', out / 'runtime' / 'deps', '--ninja', out / 'bin' / 'ninja.exe', '--gen', gen, '--out', build],
         env=clean_env(llvm / 'bin', out / 'bin'))
@@ -472,22 +472,22 @@ def write_zip(out, path):
 
 
 def prove(out):
-    """Lift build/extracted/v262144/exefs with the folder's recomp/, compile it and link fe3h.exe with the folder's tools
+    """Lift build/extracted/v327680/exefs with the folder's recomp/, compile it and link fe3h.exe with the folder's tools
     only, then run the probes next to it: the lift, compile and link steps of an install, without the installer."""
     out = out.resolve()
-    ext = MAIN_ROOT / 'build' / 'extracted' / 'v262144'
+    ext = MAIN_ROOT / 'build' / 'extracted' / 'v327680'
     chk = MAIN_ROOT / 'build' / 'release-check'
     gen = chk / 'gen'
     env = clean_env(out / 'python', out / 'llvm' / 'bin', out / 'bin')
     t0 = time.time()
     run([out / 'python' / 'python.exe', '-I', out / 'recomp' / 'gen.py', '--exefs', ext / 'exefs', '--out', gen,
-         '--modules', 'main,subsdk0,subsdk1,sdk', '--patches', out / 'recomp' / 'patches-v262144.txt'], env=env, cwd=out)
+         '--modules', 'main,subsdk0,subsdk1,sdk', '--patches', out / 'recomp' / 'patches-v327680.txt'], env=env, cwd=out)
     print(f'prove: lift {time.time() - t0:.0f} s')
     t0 = time.time()
     run([out / 'python' / 'python.exe', out / 'tools' / 'build_game.py', '--toolchain', out / 'llvm',
          '--deps', out / 'runtime' / 'deps', '--runtime', out / 'runtime', '--runtime-lib', out / 'runtime' / 'libfe3hrt.a',
          '--ninja', out / 'bin' / 'ninja.exe', '--gen', gen, '--out', chk, '--exefs', ext / 'exefs', '--romfs', ext / 'romfs',
-         '--profile', chk / 'profile', '--expected', out / 'tools' / 'data' / 'expected-v1.1.1.json'], env=env)
+         '--profile', chk / 'profile', '--expected', out / 'tools' / 'data' / 'expected-v1.2.0.json'], env=env)
     print(f'prove: build {time.time() - t0:.0f} s')
     for dll in ('SDL3.dll', 'libopus-0.dll'):
         shutil.copy2(out / 'bin' / dll, chk / dll)

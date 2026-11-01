@@ -14,11 +14,11 @@ the record of what was found.
 The game boots to its title screen, its menus work, and a new game runs through the opening movie into the first
 chapter, with music, voices and sound effects, and the first battle plays. Nothing further in has been tried.
 
-Version 1.1.1 is the target; it is the latest update available to the author.
+Version 1.2.0, the final update, is the target. 1.1.1 still installs from its tables but is no longer tested.
 
 ## What you need
 
-- Your own dump of the game (XCI or NSP), its 1.1.1 update NSP, and the keys from your own console. This repository
+- Your own dump of the game (XCI or NSP), its 1.2.0 update NSP, and the keys from your own console. This repository
   contains no game content, and the content check (`tools/check_content.py`, run by the pre-commit hook and CI) keeps
   it that way.
 - Windows 10 or later, a Vulkan 1.3 GPU, and the toolchain of totk-pc-recomp's `docs/building.md`: MSYS2 UCRT64
@@ -30,9 +30,9 @@ Version 1.1.1 is the target; it is the latest update available to the author.
 1. Copy `config.example.toml` to `config.local.toml` and point it at your game, update and keys.
 2. `python tools/build_hactool.py`, then `python tools/extract_exefs.py <game> --keys <keys> --output build/extracted/v0/exefs`
    for the base and, with `--update`, for the update; `python tools/extract_romfs.py` merges the update's RomFS.
-3. `python recomp/gen.py --exefs build/extracted/v262144/exefs --out generated/v262144 --modules main,subsdk0,subsdk1,sdk --patches recomp/patches-v262144.txt`
+3. `python recomp/gen.py --exefs build/extracted/v327680/exefs --out generated/v327680 --modules main,subsdk0,subsdk1,sdk --patches recomp/patches-v327680.txt`
 4. `python tools/build_xlate.py`, then `python tools/build_game.py` (Windows Python; MSYS2 clang does the compiling).
-5. Run `build\v262144\fe3h.exe`, in the foreground: the game pauses when its window loses focus.
+5. Run `build\v327680\fe3h.exe`, in the foreground: the game pauses when its window loses focus.
 
 ## Installer
 
@@ -43,7 +43,7 @@ checkout it runs on the usual toolchain (MSYS2, `build/xlate`, `toolchain/hactoo
 `tools/build_game.py --make-runtime-lib --out build/install-rtlib`):
 
 ```
-.venv-win\Scripts\python -m installer --base <game> --update <1.1.1 NSP> --keys <prod.keys> --lang en-US --dest <folder>
+.venv-win\Scripts\python -m installer --base <game> --update <1.2.0 NSP> --keys <prod.keys> --lang en-US --dest <folder>
 ```
 
 `tools/make_release.py` assembles the release folder (an embeddable Python, llvm-mingw, the prebuilt runtime library,

@@ -33,7 +33,7 @@ totk-pc-recomp is MIT (Copyright (c) 2026 Valiantsin Dzerakh). Every copy gets a
 ## Status
 
 Phase 1: the game boots to its title screen (`docs/plan.md`, Phase 1). The repository on this machine is at
-`C:\dev\fe3h-pc-recomp`; build with Windows Python (`tools\build_game.py`) and run `build\v262144\fe3h.exe` in the
+`C:\dev\fe3h-pc-recomp`; build with Windows Python (`tools\build_game.py`) and run `build\v327680\fe3h.exe` in the
 foreground. Phase 0's survey steps are kept below for the record:
 
 1. The user fills in `config.local.toml` from `config.example.toml`.
@@ -45,7 +45,7 @@ foreground. Phase 0's survey steps are kept below for the record:
 
 ## Open questions
 
-- Target update: 1.1.1 (v262144), decided. It is the latest update the user can dump; 1.2.0 (Cindered Shadows) is not available to them, so build around 1.1.1.
+- Target update: 1.2.0 (v327680), the final update, decided on 2026-11-01 when the user obtained it; 1.1.1 (v262144) was the target before. Only `main` differs between the two; the SDK modules are identical.
 - Graphics API: NVN, confirmed. Shaders ship precompiled as Maxwell code in KTGL `SPKG` packages, so the TotK shader translator path applies. glslc is linked but no run-time compile has been seen yet; confirm at run time that it stays unused.
 - Add-on content (Expansion Pass, Cindered Shadows) needs `aoc:u` and an extra RomFS mount, which TotK did not need.
 - Game logic may assume 30 fps.

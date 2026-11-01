@@ -6,13 +6,13 @@ data and no code derived from the game: the installer builds the game on the pla
 holds only the game; the installer and its tools stay outside it.
 
 The installer is totk-pc-recomp's (`installer/`, MIT), renamed and changed where this game differs: one supported
-update, our extraction tools, no RomFS patches and no shader seed.
+update line, our extraction tools, no RomFS patches and no shader seed.
 
 ## What the player does
 
 1. Downloads `FE3H-Setup-<version>-windows.zip` from GitHub Releases, unpacks it anywhere and starts `FE3H-Setup.exe`.
 2. Picks:
-   - the base game (XCI or NSP) and the 1.1.1 update (NSP);
+   - the base game (XCI or NSP) and the 1.2.0 update (NSP; 1.1.1 is accepted but no longer tested);
    - their `prod.keys`;
    - the game language and the install folder.
 3. Waits for the setup, one time. The window shows each step and its progress.
@@ -39,13 +39,13 @@ release that changes nothing game-derived skips the rebuild.
 
 ## Setup steps
 
-1. **Check** before writing anything: the files open with the keys, the base is 1.0.0 and the update 1.1.1 (by the
+1. **Check** before writing anything: the files open with the keys, the base is 1.0.0 and the update 1.2.0 or 1.1.1 (by the
    hashes of their code modules, `tools/data/expected-v*.json`), the keys are new enough for the update, enough space
    is free on the target disk (about 25 GiB at the peak of a first install, 13 GiB after it), the CPU has AVX2
    (`-march=x86-64-v3`), a Vulkan 1.3 GPU exists. Each failure is one clear message.
 2. **Extract** the ExeFS of the update and the RomFS (the base image with the update's BKTR patch, merged by hactool,
    which verifies every IVFC level) into the install folder and verify the hashes.
-3. **Lift** the ExeFS to C (`recomp/gen.py`, `recomp/patches-v262144.txt`) into a temp folder next to the installer.
+3. **Lift** the ExeFS to C (`recomp/gen.py`, `recomp/patches-v<version>.txt`) into a temp folder next to the installer.
 4. **Compile** the generated C, `modules.c`, `romfs.c` and `patches.c` (they bake the per-install layout, RomFS hashes
    and the game version's patch page) and link them with the prebuilt runtime library into `fe3h.exe`
    (`build_game.py --runtime-lib`).
