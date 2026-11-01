@@ -10,8 +10,7 @@ update, our extraction tools, no RomFS patches and no shader seed.
 
 ## What the player does
 
-1. Downloads `FE3H-Setup-<version>-windows.zip` from GitHub Releases (none is published yet), unpacks it anywhere and
-   starts `FE3H-Setup.exe`.
+1. Downloads `FE3H-Setup-<version>-windows.zip` from GitHub Releases, unpacks it anywhere and starts `FE3H-Setup.exe`.
 2. Picks:
    - the base game (XCI or NSP) and the 1.1.1 update (NSP);
    - their `prod.keys`;
@@ -122,4 +121,6 @@ fe3h.ini.example, VERSION  the default ini; the release string (the repository's
 ## Later
 
 - An icon for `fe3h.exe` and the setup (`runtime/fe3h.ico`; the launcher builds without one for now).
-- A GitHub release workflow. NSZ and XCZ input. Linux release.
+- A GitHub release workflow: a release is `make_release.py --zip` on a machine with uv and Python 3.14, a tag at the
+  commit the zip names in its `VERSION`, and `gh release create` with the zip as `FE3H-Setup-<version>-windows.zip`.
+  NSZ and XCZ input. Linux release.

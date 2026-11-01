@@ -48,7 +48,8 @@ checkout it runs on the usual toolchain (MSYS2, `build/xlate`, `toolchain/hactoo
 
 `tools/make_release.py` assembles the release folder (an embeddable Python, llvm-mingw, the prebuilt runtime library,
 the translator, hactool, ninja, the scripts: nothing derived from the game) and `FE3H-Setup.exe`, which runs the same
-installer with a window. No release is published yet.
+installer with a window. Releases are on [GitHub Releases](https://github.com/jaigner-hub/fe3h-pc-recomp/releases):
+unpack `FE3H-Setup-<version>-windows.zip` and start `FE3H-Setup.exe`; nothing else needs to be installed.
 
 ## Third-party code
 
