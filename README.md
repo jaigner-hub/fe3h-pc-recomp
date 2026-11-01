@@ -34,6 +34,22 @@ Version 1.1.1 is the target; it is the latest update available to the author.
 4. `python tools/build_xlate.py`, then `python tools/build_game.py` (Windows Python; MSYS2 clang does the compiling).
 5. Run `build\v262144\fe3h.exe`, in the foreground: the game pauses when its window loses focus.
 
+## Installer
+
+`installer/` builds a playable folder from the game files with no toolchain set up by hand: it checks the files and
+the machine, extracts, lifts, compiles, links and installs the translator, with resume and in-place updates
+([docs/installer.md](docs/installer.md)). It is totk-pc-recomp's installer with the FE3H parts swapped in. In a
+checkout it runs on the usual toolchain (MSYS2, `build/xlate`, `toolchain/hactool/hactool.exe`,
+`tools/build_game.py --make-runtime-lib --out build/install-rtlib`):
+
+```
+.venv-win\Scripts\python -m installer --base <game> --update <1.1.1 NSP> --keys <prod.keys> --lang en-US --dest <folder>
+```
+
+`tools/make_release.py` assembles the release folder (an embeddable Python, llvm-mingw, the prebuilt runtime library,
+the translator, hactool, ninja, the scripts: nothing derived from the game) and `FE3H-Setup.exe`, which runs the same
+installer with a window. No release is published yet.
+
 ## Third-party code
 
 Everything taken from elsewhere is listed with its source, commit and license in

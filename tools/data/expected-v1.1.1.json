@@ -1,0 +1,19 @@
+{
+  "_comment": "Hashes of what tools/extract_exefs.py and tools/extract_romfs.py produce from a genuine dump (no game data): the installer checks the extraction against them.",
+  "title_id": "010055D009F78000",
+  "version": 262144,
+  "display_version": "1.1.1",
+  "program_nca": "ed5646ef2470431ed49d530f89fdb8ce.nca",
+  "exefs_sha256": {
+    "main": "5551061ca7aabf83fe1db258800d49724426e62f77f2697059b74660fb281cd1",
+    "main.npdm": "a7f2197739e24f0efe9fa1cf2e05362e84ffc5ef3a34f003f487e35b8c60b3ba",
+    "rtld": "52735462296339700ae8c54b3d84f8fd0d96113a313a15a4e0a6973ec63dffb4",
+    "sdk": "d3e7f5dd35e0aa618abddeb1b9f05b38c5a94e4788374b4444c32df057fb0f42",
+    "subsdk0": "7505e7c1e0a11d2cfc7daa39f0aa4c51632ee2998baaf5d48b9d711d8d729026",
+    "subsdk1": "1c3ab141bdde9f46cf5a6cefeae07d06d205114e1b16069211067f00fea382b3"
+  },
+  "romfs": {
+    "size": 12132152692,
+    "sha256": "412a3d3ef37a98024642aa08b71654a3adb64fa02d029e08a3ea57f39b07eace"
+  }
+}

@@ -1,0 +1,3 @@
+/* The icon of FE3H-Setup.exe: runtime/fe3h.ico, the icon of fe3h.exe. tools/make_release.py compiles this file with
+   llvm-windres -I runtime and links it with launcher.c. */
+1 ICON "fe3h.ico"

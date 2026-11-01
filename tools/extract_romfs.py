@@ -148,9 +148,12 @@ def run_hactool(command, environment):
     return done.returncode, LONG_HEX.sub('<hex removed>', done.stdout + done.stderr)
 
 
-def merge(base, update, keys_path, hactool, extracted, logs):
+def merge(base, update, keys_path, hactool, extracted, logs, out=None, phase=None):
+    """out: the romfs folder to write (default extracted/v<version>/romfs). phase(name): 'copy', 'merge', 'index'
+    (tools/extract.py, for the installer's progress)."""
     tickets, version, inputs = program_ncas(base, update, keys_path)
-    output = extracted / f'v{version}' / 'romfs'
+    output = Path(out) if out else extracted / f'v{version}' / 'romfs'
+    phase = phase or (lambda name: None)
     if (output / 'index.json').is_file() and (output / 'romfs.bin').is_file():
         say(f'{output}: already extracted')
         return output
@@ -173,12 +176,14 @@ def merge(base, update, keys_path, hactool, extracted, logs):
         hactool_keys = tmp / 'hactool.keys'
         hactool_prod_keys(keys_path, hactool_keys)
         say('  copying the base and update Program NCAs')
+        phase('copy')
         base_nca, update_nca = tmp / 'base.nca', tmp / 'update.nca'
         for (source, record, _), target in zip(inputs, (base_nca, update_nca)):
             copy_range(source, record_offset(record), record['size'], target)
         result = tmp / 'result'
         result.mkdir()
         say('  merging with hactool')
+        phase('merge')
         command = [str(hactool), '-x', '-y', '--disablekeywarns', '--suppresskeys', '-k', str(hactool_keys),
                    f'--basenca={base_nca}', f'--section{sections[0]}={result / "romfs.bin"}', str(update_nca)]
         code, log = run_hactool(command, dict(os.environ, MNG_TITLE_KEYS=str(title_keys)))
@@ -188,6 +193,7 @@ def merge(base, update, keys_path, hactool, extracted, logs):
         require(all(re.search(rf'Level {i} \(GOOD\)', log) for i in range(6)), 'hactool did not verify all six IVFC levels')
         image = result / 'romfs.bin'
         say('  hashing and indexing the merged image')
+        phase('index')
         files = index_romfs(image)
         report = {'status': 'pass', 'version': version, 'romfs_size': image.stat().st_size,
                   'romfs_sha256': sha256(image), 'files': files,

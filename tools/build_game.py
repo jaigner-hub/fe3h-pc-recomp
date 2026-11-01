@@ -93,7 +93,7 @@ DEFAULT_DEPS = ROOT / 'toolchain' / 'deps-mingw'
 # of the player's game version (its patch page is the page after that version's main).
 INSTALL_SIDE = {'romfs.c', 'patches.c'}
 LIB_NAME = 'libfe3hrt.a'
-AR = UCRT / 'llvm-ar.exe'
+AR = UCRT / 'llvm-ar.exe' if (UCRT / 'llvm-ar.exe').is_file() else UCRT / 'ar.exe'   # MSYS2 without the llvm package has binutils' ar
 WINDRES = UCRT / 'windres.exe'   # runtime/fe3h.rc: the manifest of fe3h.exe
 TOOLCHAIN_BIN = None   # llvm-mingw bin directory, set by main() for --toolchain
 DEPS = None            # the deps directory of an llvm-mingw build
@@ -241,7 +241,10 @@ def ninja_file(gen, out, mods, pool_depth, skip=(), prebuilt=False, runtime_lib=
     vma = f'{cmd_path(DEPS / "include")} -I {cmd_path(DEPS / "include" / "vma")}' if DEPS else cmd_path(VMA_INCLUDE)
     imgui = cmd_path(RUNTIME / 'third_party' / 'imgui')
     rt_inc = f'{inc} -I {cmd_path(out)} -I {vma} -I {imgui}'   # romfs_config.h, vk_mem_alloc.h (+ deps headers), imgui.h
-    libs = [f'-L {cmd_path(DEPS / "lib")}'] + LLVM_LINK_LIBS if DEPS else LINK_LIBS
+    # llvm-mingw links against its libc++; MSYS2 UCRT64 clang (installer/layout.py's dev fallback, with the MSYS2 tree
+    # as --deps) against libstdc++: by the toolchain's libraries, not by whether --deps was given.
+    llvm_libs = DEPS and TOOLCHAIN_BIN and (TOOLCHAIN_BIN.parent / 'x86_64-w64-mingw32' / 'lib' / 'libc++.a').is_file()
+    libs = ([f'-L {cmd_path(DEPS / "lib")}'] if DEPS else []) + (LLVM_LINK_LIBS if llvm_libs else LINK_LIBS)
     lines = [
         '# Written by tools/build_game.py; do not edit.',
         'ninja_required_version = 1.10',
