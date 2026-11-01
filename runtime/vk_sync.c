@@ -348,6 +348,11 @@ uint64_t vk_sync_submit(const uint64_t *handles, int n) {
     vk_mem_dirty_submit();   // FE3H_TRACE=perf: what a mirror would upload before this submit
     uint64_t fence = __atomic_load_n(&issued, __ATOMIC_ACQUIRE) + 1;
     cur_fence = fence;
+    // Noted before the recording, not after the submit: an object another thread releases while this submission is
+    // recorded (a texture replaced at its address, a sweep of released textures) may be named by it, and deferred
+    // destruction (vk_memory.c collect_locked) must then wait for this fence, not the previous one. FE3H's battles
+    // recreate transient textures while the render thread records; the GPU then wrote into destroyed images.
+    vk_mem_note_submit(fence);
     CmdSlot *s = take_slot(c, fence);
     VkCommandBufferBeginInfo bi = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};

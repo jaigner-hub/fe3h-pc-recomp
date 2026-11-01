@@ -73,7 +73,10 @@ and the title, in the order found:
   address 0), some way into the first battle, with no host warning before it. Pool finalization waited for the GPU with
   `vkQueueWaitIdle`, which covers submitted work only; FE3H's loader threads free a pool per resource while the render
   thread records and submits, so a pool's buffers could be destroyed under a submission being recorded. The
-  finalization (and virtual remapping) now hold the submit lock (`vk_sync.c` `vk_sync_exclusive`). Diagnostics:
+  finalization (and virtual remapping) now hold the submit lock (`vk_sync.c` `vk_sync_exclusive`). That alone did not
+  end it: deferred destruction of any object (images, views, buffers) waited for the timeline value noted at the last
+  *submit*, so a texture released on another thread while a submission was being recorded was destroyed while that
+  submission ran; the fence is now noted before the recording (`vk_sync_submit`). Diagnostics:
   `FE3H_CRUMBS=ops` writes a GPU breadcrumb at every pass boundary and before draws and dispatches outside a pass, with
   a line saying what it was (`vk_crumbs.c`); refused on NVIDIA, where a marker or a checkpoint between draws loses
   the device at the first frame with that same signature (measured on an RTX 4070, driver 1.4.351).
