@@ -102,7 +102,8 @@ and the title, in the order found:
   FE3H's parts are the extraction (`tools/extract.py` over our two tools; one update, 1.1.1, by hash), a Prepare step
   that only installs the translator, and the language table. A dev-mode install from the dumps into a fresh folder
   runs to a playable `fe3h.exe` (extract 194 s, lift 17 s, compile 11 min, of which the largest generated chunk alone
-  is most); the release folder (450 MB) assembles with its content check clean.
+  is most); the release folder (450 MB, 126 MB zipped) assembles with its content check clean, and `--prove` builds
+  the game from it with nothing but its own Python, llvm-mingw, runtime library and tools, and passes the probes.
 
 Next: the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every

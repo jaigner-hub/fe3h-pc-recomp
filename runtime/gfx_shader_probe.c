@@ -141,7 +141,10 @@ static void remove_dir(const char *dir) {
 
 int probe_shader(void) {
     char path[MAX_PATH * 2 + 64];
-    CHECK(find_root(root, sizeof root), "build/v121/shaders/jobs.json not found (run tools/shader_census.py)");
+    if (!find_root(root, sizeof root)) {   // TotK's shader census (tools/shader_census.py), which FE3H does not carry
+        printf("probe-shader: skipped: build/v121/shaders/jobs.json (the TotK census) is not present\n");
+        return 0;
+    }
     snprintf(path, sizeof path, "%s\\build\\v121\\shaders\\jobs.json", root);
     size_t jobs_size;
     char *jobs = slurp(path, &jobs_size);
