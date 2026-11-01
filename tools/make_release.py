@@ -448,6 +448,8 @@ def check_bundle(out):
     if r.returncode:
         sys.exit(f'bundle check: window selftest exit {r.returncode}\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}')
     print('bundle check: the window built every screen in both languages and closed')
+    for cache in sorted(out.rglob('__pycache__')):   # the checks' bytecode: not part of the release
+        shutil.rmtree(cache)
 
 
 def sizes(out):
@@ -461,7 +463,7 @@ def write_zip(out, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for p in sorted(out.rglob('*')):
-            if p.is_file():
+            if p.is_file() and '__pycache__' not in p.parts:
                 info = zipfile.ZipInfo((Path(out.name) / p.relative_to(out)).as_posix(), (1980, 1, 1, 0, 0, 0))
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = 0o644 << 16
