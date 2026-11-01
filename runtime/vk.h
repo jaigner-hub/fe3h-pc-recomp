@@ -37,7 +37,7 @@ typedef struct VkCtx {
     int validation;                         // layer active
     int has_custom_border_color, has_eds, has_eds2, has_eds3, has_vertex_input_dynamic_state,
         has_conditional_rendering, has_transform_feedback, has_provoking_vertex, has_device_fault, has_memory_budget,
-        has_robustness2, has_buffer_device_address, has_fragment_shader_interlock, has_buffer_marker,
+        has_robustness2, has_buffer_device_address, has_fragment_shader_interlock, has_buffer_marker, has_nv_checkpoints,
         has_astc_ldr;                       // textureCompressionASTC_LDR (enabled when reported)
     // Feedback loops (maxwell.md 1.9, vk_exec_draw.c feedback_prepare): a draw samples a target of its open pass that
     // an earlier draw of the pass wrote. FE3H_FEEDBACK=0: VK_FEEDBACK_OFF (sampled in GENERAL without a barrier, the

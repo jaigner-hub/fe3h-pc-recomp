@@ -14,11 +14,19 @@
 #include "vk.h"
 
 static PFN_vkCmdWriteBufferMarkerAMD write_marker;
+static PFN_vkCmdSetCheckpointNV set_checkpoint;          // VK_NV_device_diagnostic_checkpoints: the per-op crumbs there
+static PFN_vkGetQueueCheckpointDataNV get_checkpoints;
+static VkQueue crumb_queue;
 static VkBuffer buf;
 static VmaAllocation alloc;
 static volatile uint32_t *words;
 
 void vk_crumbs_init(VkCtx *c) {
+    if (c->has_nv_checkpoints) {
+        set_checkpoint = (PFN_vkCmdSetCheckpointNV)vkGetDeviceProcAddr(c->device, "vkCmdSetCheckpointNV");
+        get_checkpoints = (PFN_vkGetQueueCheckpointDataNV)vkGetDeviceProcAddr(c->device, "vkGetQueueCheckpointDataNV");
+        crumb_queue = c->gfx_queue;
+    }
     if (!c->has_buffer_marker) return;
     write_marker = (PFN_vkCmdWriteBufferMarkerAMD)vkGetDeviceProcAddr(c->device, "vkCmdWriteBufferMarkerAMD");
     VkBufferCreateInfo bi = {.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = 16,
@@ -44,8 +52,10 @@ void vk_crumbs_release(void) {
 }
 
 // FE3H_CRUMBS=ops: a crumb at every pass begin and end and before every draw and dispatch outside a pass, each with a
-// line saying what it was, so a device loss names where the GPU was (for finding a fault, not for play). Inside a pass
-// the marker write itself faults on NVIDIA (RTX 4070: the same "invalid write at 0" a lost device reports).
+// line saying what it was, so a device loss names where the GPU was (for finding a fault, not for play). On NVIDIA
+// the crumb is a checkpoint (VK_NV_device_diagnostic_checkpoints, read back from the queue after the loss): a buffer
+// marker between draws faults there (RTX 4070: the same "invalid write at 0" a lost device reports), inside a pass or
+// not. Elsewhere it is a buffer marker like the submission crumbs.
 #define OP_RING 1024
 static int ops_on = -1;
 static uint64_t op_serial;
@@ -54,8 +64,9 @@ static char op_desc[OP_RING][160];
 int vk_crumbs_ops(void) {
     if (ops_on < 0) {
         const char *e = cfg_get("FE3H_CRUMBS");
-        ops_on = e && !strcmp(e, "ops") && write_marker != NULL;
-        if (ops_on) rt_log("vk: FE3H_CRUMBS=ops: a breadcrumb at every pass boundary and before draws and dispatches outside a pass");
+        ops_on = e && !strcmp(e, "ops") && (set_checkpoint != NULL || write_marker != NULL);
+        if (ops_on) rt_log("vk: FE3H_CRUMBS=ops: a %s at every pass boundary and before draws and dispatches outside a pass",
+                           set_checkpoint ? "checkpoint" : "breadcrumb");
     }
     return ops_on;
 }
@@ -63,7 +74,25 @@ int vk_crumbs_ops(void) {
 void vk_crumb_op(VkCommandBuffer cb, const char *desc) {
     uint64_t n = ++op_serial;
     snprintf(op_desc[n % OP_RING], sizeof op_desc[0], "%s", desc);
-    vk_crumb(cb, VK_CRUMB_OP, n);
+    if (set_checkpoint) set_checkpoint(cb, (const void *)(uintptr_t)n);   // the marker is the serial, opaque to the driver
+    else vk_crumb(cb, VK_CRUMB_OP, n);
+}
+
+// After a device loss: the newest checkpoints the queue reached, per pipeline stage, and what they were.
+static void checkpoints_report(void) {
+    if (!get_checkpoints || !crumb_queue) return;
+    uint32_t n = 0;
+    get_checkpoints(crumb_queue, &n, NULL);
+    if (!n) { rt_log("vk: checkpoints: none reached"); return; }
+    VkCheckpointDataNV d[16];
+    if (n > 16) n = 16;
+    for (uint32_t i = 0; i < n; i++) d[i] = (VkCheckpointDataNV){.sType = VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV};
+    get_checkpoints(crumb_queue, &n, d);
+    for (uint32_t i = 0; i < n; i++) {
+        uint64_t k = (uint64_t)(uintptr_t)d[i].pCheckpointMarker;
+        rt_log("vk: checkpoint reached at stage %#x: op %llu (%s)", (unsigned)d[i].stage, (unsigned long long)k,
+               k && op_serial - k < OP_RING ? op_desc[k % OP_RING] : "description no longer kept");
+    }
 }
 
 void vk_crumb(VkCommandBuffer cb, int kind, uint64_t n) {
@@ -88,6 +117,7 @@ static void describe(uint32_t code, char *o, size_t size) {
 }
 
 void vk_crumbs_report(void) {
+    checkpoints_report();
     if (!words) return;
     char reached[256], finished[256];
     describe(words[0], reached, sizeof reached);

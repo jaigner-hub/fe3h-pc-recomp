@@ -75,8 +75,8 @@ and the title, in the order found:
   thread records and submits, so a pool's buffers could be destroyed under a submission being recorded. The
   finalization (and virtual remapping) now hold the submit lock (`vk_sync.c` `vk_sync_exclusive`). Diagnostics:
   `FE3H_CRUMBS=ops` writes a GPU breadcrumb at every pass boundary and before draws and dispatches outside a pass, with
-  a line saying what it was (`vk_crumbs.c`); a buffer-marker write inside a pass faults on NVIDIA, with the same
-  signature.
+  a line saying what it was (`vk_crumbs.c`): on NVIDIA through `VK_NV_device_diagnostic_checkpoints`, since a
+  buffer-marker write between draws faults there with the same signature (inside a pass or not).
 
 Next: loading is still about three times slower than hardware; the lifter passes the differential tests on `main`
 (`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled, and `sdk`'s libopus runs lifted for every
