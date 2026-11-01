@@ -20,6 +20,24 @@ Answer these from the user's dump before writing any port code. Record answers h
 
 Lift all modules, link them on the host, bring up the services the game calls, and draw the first frames.
 
+**Reached (2026-11-01):** `fe3h.exe` boots 1.1.1 to the title screen ("PRESS ANY BUTTON", the throne room with its
+light shafts) in about 58 s, and opens the opening movie after idling there. What stood between the first black frames
+and the title, in the order found:
+
+- `nvnCommandBufferBindProgram` with a subset of stages: FE3H binds its vertex and fragment programs separately; the
+  replay now combines the stages' programs (`vk_exec_draw.c` `bind_program`).
+- `nn::account::OpenPreselectedUser` returns a `Result` in SDK 6.5.0; the `bool` of TotK's `TryOpenPreselectedUser`
+  read as a failure and the game skipped mounting its save data, so the title never finished loading.
+- The back end drained the queued, display-paced present before freeing any memory pool and in `nvnQueueFinish`;
+  FE3H's loader makes a pool and finishes the queue per resource, so loading ran at one resource per frame. The drain
+  now applies only to a pool holding a window texture (`vk_backend.c`).
+- Smaller: the NVN depth mode defaults to NEAR_IS_MINUS_W (FE3H never sets one), `SetCopyImageStride`, the older
+  `nvnQueueAcquireTexture`, offline stubs for nifm, socket and the network service account, older `nn::fs` calls.
+
+Next: loading is still about three times slower than hardware; the opening movie (`nn::movie` over the host decoder)
+and leaving the title with a button press are untested; the lifter passes the differential tests on `main`
+(`tests/diff/func.py`, `lift.py`) but `subsdk1` and `sdk` were not sampled.
+
 ## Shared core
 
 As pieces turn out to be identical to totk-pc-recomp's, list them here. They are candidates for a shared Switch recomp library.

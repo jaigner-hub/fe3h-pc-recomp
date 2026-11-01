@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_exec.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; adds SetCopyImageStride (OP_COPY_IMG_STRIDE) for FE3H.
+// From totk-pc-recomp runtime/vk_exec.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; adds SetCopyImageStride (OP_COPY_IMG_STRIDE) for FE3H; separable programs: BindProgram with a subset of stages (FE3H).
 // The op-stream replay of the Vulkan back end. vk_exec.c walks the command
 // handles of a submission, keeps render targets, passes, clears and fixed-function state; draws, binds and dispatches
 // (vk_exec_draw.c) and copies, counters, events and conditional rendering (vk_exec_xfer.c) plug in through the two
@@ -78,8 +78,9 @@ typedef struct VkExec {
     VkPipeState pipe;
 
     // ---- vk_exec_draw.c slots (draws, binds, dispatch): left empty by vk_exec.c
-    const prog_t *prog;                  // OP_BIND_PROGRAM
+    const prog_t *prog;                  // OP_BIND_PROGRAM: the program serving every stage (vk_exec_draw.c bind_program)
     int32_t prog_stages;
+    const prog_t *stage_prog[6];         // the program bound for each NVN stage (separable binds)
     NVNbufferRange vbuf[16];             // OP_BIND_VBUF
     p_bind_buf ubo[6][18], ssbo[6][16];  // OP_BIND_UBO / OP_BIND_SSBO per stage and index
     uint64_t tex[6][128], samp[6][128], img[6][32];   // OP_BIND_TEX / OP_BIND_SAMP / OP_BIND_IMG handles per stage

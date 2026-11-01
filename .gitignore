@@ -4,6 +4,7 @@
 # Python environments
 /.venv/
 /.venv-py314/
+/.venv-win/
 __pycache__/
 
 # Personal paths to game files and keys

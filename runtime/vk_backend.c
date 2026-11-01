@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_backend.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/vk_backend.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; pool finalize and virtual mapping drain the presents only for a pool holding a window texture.
 // The Vulkan graphics back end: gfx_vulkan_backend wires the memory and
 // texture layer (vk_memory.c, vk_texture.c), submission and fences (vk_sync.c) and the present. Every entry starts the
 // device on first use.
@@ -357,11 +357,19 @@ static void vk_be_present(const tex_t *t, const int crop[4], uint64_t at_ns) {
 WEAK void vk_program_release(const prog_t *p) { (void)p; }
 
 static int vk_be_pool_init(pool_t *p) { vk_sync_start(); return vk_pool_init(p); }
-static void vk_be_pool_fini(pool_t *p) { vk_sync_start(); replay_drain(DR_POOL_FINI); vk_present_drain(); vk_pool_fini(p); }
+// A queued present reads a window texture until the present thread submits it, so a pool holding one is freed only
+// after that. Other pools are freed at once: FE3H's loader makes and frees a pool per resource, and the drain waited
+// for the paced present, up to a frame, each time (loading at one resource a frame).
+static void vk_be_pool_fini(pool_t *p) {
+    vk_sync_start();
+    replay_drain(DR_POOL_FINI);
+    if (nvn_window_uses_pool(p)) vk_present_drain();
+    vk_pool_fini(p);
+}
 static int vk_be_pool_map_virtual(pool_t *v, int n, const void *requests) {
     vk_sync_start();
     replay_drain(DR_MAP_VIRTUAL);
-    vk_present_drain();
+    if (nvn_window_uses_pool(v)) vk_present_drain();
     return vk_pool_map_virtual(v, n, requests);
 }
 static void vk_be_texture_register(int id, const tex_t *t, const view_t *v) { vk_sync_start(); vk_texture_register(id, t, v); }
@@ -400,7 +408,10 @@ static uint64_t vk_be_submit(const uint64_t *handles, int n) {
     }
     return replay_enqueue(&it);
 }
-static void vk_be_finish(void) { vk_sync_start(); replay_drain(DR_FINISH); vk_present_drain(); vk_sync_finish(); }
+// QueueFinish waits for the GPU work submitted so far. A queued present is not waited for: the present thread holds it
+// until its display slot, up to a frame, and the game cannot touch a presented image before it acquires it again.
+// FE3H's loader finishes the queue after every resource, so that wait had been part of its loading time.
+static void vk_be_finish(void) { vk_sync_start(); replay_drain(DR_FINISH); vk_sync_finish(); }
 static int replay_check(void) {
     static int on = -1;
     if (on < 0) {

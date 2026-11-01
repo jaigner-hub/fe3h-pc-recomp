@@ -848,8 +848,14 @@ HOST_OBSERVER("nnMain", obs_main);
 
 HOST_OVERRIDE("_ZN2nn7account10InitializeEv", ov_account_initialize);
 HOST_OVERRIDE("_ZN2nn7account22TryOpenPreselectedUserEPNS0_10UserHandleE", ov_open_user);
-// void OpenPreselectedUser(UserHandle *out): the variant that aborts instead of returning false (FE3H, SDK 6.5.0).
-HOST_OVERRIDE("_ZN2nn7account19OpenPreselectedUserEPNS0_10UserHandleE", ov_open_user);
+// Result OpenPreselectedUser(UserHandle *out) (FE3H, SDK 6.5.0): the Result-returning form of TryOpenPreselectedUser.
+// FE3H tests it with `cbz w0`: 0 is success; a bool 1 reads as a failure and the game skips mounting its save data.
+#define ACCOUNT_R_USER_NOT_EXIST (124u | (100u << 9))
+static void ov_open_user_result(Cpu *c) {
+    ov_open_user(c);
+    ret_x(c, c->x[0] ? 0 : ACCOUNT_R_USER_NOT_EXIST);
+}
+HOST_OVERRIDE("_ZN2nn7account19OpenPreselectedUserEPNS0_10UserHandleE", ov_open_user_result);
 HOST_OVERRIDE("_ZN2nn7account9CloseUserERKNS0_10UserHandleE", ov_close_user);
 HOST_OVERRIDE("_ZN2nn7account9GetUserIdEPNS0_3UidERKNS0_10UserHandleE", ov_user_id);
 HOST_OVERRIDE("_ZN2nn7account16GetUserExistenceEPbRKNS0_3UidE", ov_user_existence);

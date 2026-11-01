@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_api_core.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/nvn_api_core.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; the depth mode defaults to NVN's NEAR_IS_MINUS_W.
 // NVN front end, first slice: device, queue, memory pool, buffer, sync and
 // event objects. Ported from MacNativeGames games/totk/third_party/d2r_gfx/gfx/nvn/hle_nvn.c @ b75be8cf (MIT,
 // Copyright (c) 2026 jhaizhou; origin d2r-mobile), lines 137-253, 534-645 and 1975-2001; Metal, mach, the translation
@@ -47,7 +47,9 @@ uint64_t nvn_new_serial(void) {
 static uint64_t last_fence;
 uint64_t nvn_fence_last(void) { return __atomic_load_n(&last_fence, __ATOMIC_ACQUIRE); }
 
-static int depth_minus_w;
+// NVN's default depth mode is NEAR_IS_MINUS_W (the GL convention); a game that never calls nvnDeviceSetDepthMode (FE3H)
+// gets it. TotK sets NEAR_IS_ZERO at start, so that default went unexercised.
+static int depth_minus_w = 1;
 int nvn_depth_minus_w(void) { return __atomic_load_n(&depth_minus_w, __ATOMIC_RELAXED); }
 
 void nvn_guest_written(uint64_t addr, uint64_t size) {

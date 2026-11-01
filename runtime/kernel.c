@@ -705,10 +705,12 @@ static void thread_dump(uint64_t frame) {
     for (RtThread *t = g_all; t; t = t->all) {
         if (!t->started || t->exited) continue;
         char e[160];
-        rt_logf("thread %#llx prio %d core %d%s: %s on %#llx (key %#llx), entry %s\n", (unsigned long long)t->id, t->prio,
-                t->cur_core, t->is_main ? " main" : "", t->wkind >= 0 && t->wkind <= W_SYNC ? kinds[t->wkind] : "?",
+        rt_logf("thread %#llx (host %lu) prio %d core %d%s: %s on %#llx (key %#llx), entry %s\n", (unsigned long long)t->id,
+                (unsigned long)t->tid, t->prio, t->cur_core, t->is_main ? " main" : "",
+                t->wkind >= 0 && t->wkind <= W_SYNC ? kinds[t->wkind] : "?",
                 (unsigned long long)(t->wkind == W_SYNC ? t->wobj : t->waddr), (unsigned long long)t->wkey,
                 ldr_describe(t->entry, e, sizeof e));
+        rt_logf("  last woken by thread %#x; blocks %llu\n", t->waker, (unsigned long long)t->nblk);
         if (t->cur && t->cur_core < 0) {
             const char *h = hostfn_name(t->cur->pc);   // in a host call: pc is that host function's slot
             char d[160];

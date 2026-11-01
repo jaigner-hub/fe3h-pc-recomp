@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_dump.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/vk_dump.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; a state line per pipeline (depth, cull, blend, mask, viewport, vertex layout).
 // FE3H_DUMP=<frame>: a frame dump for the Vulkan back end, which RenderDoc cannot capture (it hides
 // VK_EXT_external_memory_host). Between presents frame-1 and frame, the replay's command buffers also copy, after each
 // render pass, its colour and depth targets and, after each dispatch, the storage images it writes into host buffers;
@@ -668,6 +668,28 @@ static uint64_t bindings_hash(const VkExec *ex, const VkPipeInfo *info) {
     return h;
 }
 
+// The fixed-function state of a draw: what decides whether its fragments reach the target when the shaders are fine.
+static void state_line(Str *b, const VkExec *ex, const VkPipeState *s) {
+    sp(b, "    state: depth test %u write %u func %u, stencil %u, cull %u front %s mode %u, blend_en %#x, chmask %#x, "
+          "ms %u a2c %u, depth_clamp %u discard %u, minus_w %u",
+       (unsigned)s->ds.dt, (unsigned)s->ds.dw, (unsigned)s->ds.df, (unsigned)s->ds.st, (unsigned)s->poly.cull,
+       s->poly.front ? "ccw" : "cw", (unsigned)s->poly.mode, (unsigned)s->color.blend_en, (unsigned)s->chmask.mask,
+       (unsigned)s->ms.enable, (unsigned)s->ms.a2c, s->depth_clamp, s->raster_discard, s->depth_minus_w);
+    if (ex->has_vp)
+        sp(b, "; viewport %g,%g %gx%g z %g..%g", ex->vp[0][0], ex->vp[0][1], ex->vp[0][2], ex->vp[0][3], ex->vp[0][4],
+           ex->vp[0][5]);
+    if (ex->has_scissor) sp(b, "; scissor %d,%d %dx%d", ex->scissor.x, ex->scissor.y, ex->scissor.w, ex->scissor.h);
+    sp(b, "; depth range %g..%g\n", ex->depth_range[0], ex->depth_range[1]);
+    for (int i = 0; i < 16; i++) {
+        va_st a;
+        memcpy(&a, &s->vattr[i], sizeof a);
+        if (!s->vattr[i]) continue;
+        sp(b, "    vattr %d: fmt %#x offset %u stream %u (stride %u divisor %u) vbuf %#llx+%llu\n", i, (unsigned)a.fmt,
+           (unsigned)a.offset, (unsigned)a.stream, s->vstream[a.stream].stride, s->vstream[a.stream].divisor,
+           (unsigned long long)ex->vbuf[a.stream].address, (unsigned long long)ex->vbuf[a.stream].size);
+    }
+}
+
 void vk_dump_draw(VkExec *ex, const VkPipeState *s, VkPipeline p, const VkPipeInfo *info) {
     AcquireSRWLockExclusive(&rec_lock);
     if (!active()) goto out;
@@ -685,6 +707,7 @@ void vk_dump_draw(VkExec *ex, const VkPipeState *s, VkPipeline p, const VkPipeIn
     Str b = {0};
     sp(&b, "vs %016llx fs %016llx prog %llu prim %d\n", (unsigned long long)shader_hash(s->vs),
        (unsigned long long)shader_hash(s->fs), (unsigned long long)(ex->prog ? ex->prog->serial : 0), s->prim);
+    state_line(&b, ex, s);
     describe_bindings(&b, ex, info);
     ents[nents++] = (Ent){p, th, 1, b.s};
 out:

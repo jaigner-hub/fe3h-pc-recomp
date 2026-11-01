@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/fs_host.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; adds the older SDK calls GetDirectoryEntryCount, CommitSaveData, EnsureSaveData and SetAllocator (FE3H, SDK 6.5.0).
+// From totk-pc-recomp runtime/fs_host.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), renamed to fe3h; adds the older SDK calls GetDirectoryEntryCount, CommitSaveData, EnsureSaveData and SetAllocator (FE3H, SDK 6.5.0); logs failed opens with FE3H_TRACE=fs and the backtrace of an invalid close.
 // Adapted from MacNativeGames games/totk/runtime/fs_host.c @ b75be8cf (MIT, Copyright (c) 2026 MacNativeGames
 // contributors); the probe follows MacNativeGames' romfs.c runtime_fs_probe and fs_host.c runtime_save_probe.
 // nn::fs host implementation of the functions main imports. RomFS paths and
@@ -1087,9 +1087,25 @@ static void close_directory(uint64_t h) {
 // and ApplicationId are 8-byte structs passed in one register; Uid, ReadOption and WriteOption by reference.
 #define I32(i) ((int32_t)arg_x(c, i))
 #define I64(i) ((int64_t)arg_x(c, i))
-static void ov_open_file(Cpu *c) { ret_x(c, open_file(arg_p(c, 0), arg_p(c, 1), I32(2))); }
+static void ov_open_file(Cpu *c) {
+    uint32_t r = open_file(arg_p(c, 0), arg_p(c, 1), I32(2));
+    if (r && (rt_trace & RT_TRACE_FS)) {   // a failed open is where the game's error paths start
+        char lr[96];
+        rt_log("fs: OpenFile(\"%s\", mode %d) -> %#x from %s", (const char *)arg_p(c, 1), I32(2), r,
+               ldr_describe(c->x[30] - 4, lr, sizeof lr));
+    }
+    ret_x(c, r);
+}
 static void ov_file_size(Cpu *c) { ret_x(c, file_size(arg_p(c, 0), arg_x(c, 1))); }
-static void ov_close_file(Cpu *c) { close_file(arg_x(c, 0)); }
+void kern_backtrace(const Cpu *c);   // kernel.h
+static void ov_close_file(Cpu *c) {
+    uint64_t h = arg_x(c, 0);
+    if (!romfs_handle(h) && !file_of(h, NULL, NULL)) {   // before the fatal in close_file: where the game got the handle
+        rt_log("fs: CloseFile(%#llx) with no such handle; guest backtrace:", (unsigned long long)h);
+        kern_backtrace(c);
+    }
+    close_file(h);
+}
 static void ov_entry_type(Cpu *c) { ret_x(c, entry_type(arg_p(c, 0), arg_p(c, 1))); }
 static void ov_read_file(Cpu *c) { ret_x(c, read_file(arg_p(c, 0), arg_x(c, 1), I64(2), arg_p(c, 3), arg_x(c, 4))); }
 static void ov_read_options(Cpu *c) { ret_x(c, read_file(arg_p(c, 0), arg_x(c, 1), I64(2), arg_p(c, 3), arg_x(c, 4))); }

@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/vk_exec_draw.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/vk_exec_draw.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; separable programs: BindProgram with a subset of stages (FE3H).
 // Draws, binds and dispatches of the Vulkan op-stream replay: the strong
 // vk_exec_op_draw behind vk_exec.c's weak hook. The bind ops fill the VkExec slots; a draw opens the pass, resolves the
 // bound program to translated shaders (the translator's answers come from the bound state), asks vk_pipeline.c for the
@@ -2329,11 +2329,73 @@ static void bind_handles(uint64_t *dst, int cap, const p_bind_handles *b) {
     memcpy(&dst[b->first], b->h, sizeof(uint64_t) * (size_t)b->n);
 }
 
+// ---- separable programs
+// nvnCommandBufferBindProgram(cmd, program, stages) replaces the program of the stages in the bit mask only (stage bit
+// i is NVN stage i: vertex 0, fragment 1, geometry 2, tessellation control 3 and evaluation 4, compute 5). TotK binds
+// whole programs; FE3H binds a vertex program and a fragment program separately. The rest of the replay reads one
+// program (ex->prog) per draw, so when the stages come from different programs ex->prog is a combined program: the
+// shader each stage's program has for that stage, under a serial of its own, so the shader, pipeline and memo caches
+// keyed by serial keep working. Combinations are kept in a direct-mapped table; a replaced entry is not freed, as a
+// recording made before may still name it (they are small and few).
+#define COMBO_N 1024
+static struct Combo { const prog_t *src[6]; uint64_t src_serial[6]; prog_t *prog; } combos[COMBO_N];
+static SRWLOCK combo_lock = SRWLOCK_INIT;
+
+// The shader data entry of p for NVN stage st, from its control block's stage word (find_stage_scan).
+static const NVNshaderData *stage_entry(const prog_t *p, int st) {
+    for (uint32_t i = 0; p && i < p->nstage && i < 6; i++) {
+        const uint8_t *c = p->sd[i].control;
+        uint32_t s;
+        if (!c || !p->sd[i].data) continue;
+        memcpy(&s, c + 0x714, 4);
+        if ((int)s == st) return &p->sd[i];
+    }
+    return NULL;
+}
+
+static const prog_t *combined_program(const prog_t *const sp[6]) {
+    const prog_t *one = NULL;
+    int mixed = 0;
+    for (int st = 0; st < 6; st++) {
+        if (!sp[st] || !stage_entry(sp[st], st)) continue;   // a program bound for a stage it has no shader for
+        if (one && sp[st] != one) mixed = 1;
+        if (!one) one = sp[st];
+    }
+    if (!mixed) return one;
+    uint64_t h = 0;
+    for (int st = 0; st < 6; st++) h = (h ^ (uintptr_t)sp[st] ^ (sp[st] ? sp[st]->serial << 1 : 0)) * 0x9E3779B97F4A7C15ull;
+    struct Combo *e = &combos[h >> 54];
+    AcquireSRWLockExclusive(&combo_lock);
+    int hit = e->prog != NULL;
+    for (int st = 0; hit && st < 6; st++)
+        hit = e->src[st] == sp[st] && e->src_serial[st] == (sp[st] ? sp[st]->serial : 0);
+    if (!hit) {
+        prog_t *c = calloc(1, sizeof *c);
+        if (!c) rt_fatal("vk_exec: out of memory (combined program)");
+        c->magic = one->magic;
+        for (int st = 0; st < 6; st++) {
+            const NVNshaderData *d = sp[st] ? stage_entry(sp[st], st) : NULL;
+            if (d && c->nstage < 6) c->sd[c->nstage++] = *d;
+        }
+        c->serial = nvn_new_serial();
+        e->prog = c;
+        for (int st = 0; st < 6; st++) e->src[st] = sp[st], e->src_serial[st] = sp[st] ? sp[st]->serial : 0;
+    }
+    const prog_t *r = e->prog;
+    ReleaseSRWLockExclusive(&combo_lock);
+    return r;
+}
+
+static void bind_program(VkExec *ex, const p_bind_program *b) {
+    for (int st = 0; st < 6; st++)
+        if (b->stages & (1 << st)) ex->stage_prog[st] = b->prog;
+    ex->prog = combined_program(ex->stage_prog), ex->prog_stages = b->stages;
+}
+
 void vk_exec_op_draw(VkExec *ex, uint32_t op, const void *payload) {
     switch (op) {
     case OP_BIND_PROGRAM: {
-        const p_bind_program *b = payload;
-        ex->prog = b->prog, ex->prog_stages = b->stages;
+        bind_program(ex, payload);
         bind_gen++;
         break;
     }

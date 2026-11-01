@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_api.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/nvn_api.h @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; nvn_window_uses_pool.
 // Internal header of the NVN front end, shared by nvn_api_core.c and the other
 // slices (textures, samplers, programs, windows, state objects, command buffers). Adapted from MacNativeGames games/totk/third_party/d2r_gfx/gfx/nvn/hle_nvn.c and nvn_impl.h @ b75be8cf
 // (MIT, Copyright (c) 2026 jhaizhou; origin d2r-mobile).
@@ -99,7 +99,8 @@ static inline const void *nvn_op_payload(const op_hdr *h) { return h + 1; }
 int nvn_handle_live(uint64_t handle);                      // 1 while the handle's copy exists (its control memory was
                                                            // not added again)
 uint64_t nvn_handle_bytes(uint64_t handle);                // bytes of the copy, OP_BEGIN to OP_END; 0 if not live
-uint64_t nvn_submit_count(void);                           // QueueSubmitCommands calls so far
+uint64_t nvn_submit_count(void);
+int nvn_window_uses_pool(const pool_t *p);                 // a window texture lives in p (nvn_api_obj.c)                           // QueueSubmitCommands calls so far
 const char *nvn_op_name(uint32_t op);                      // "DRAW_IDX", ...; "?" past OP_COUNT_
 // MemoryPoolInvalidateMappedRange: the CPU is about to read pool storage the GPU wrote. Weak no-op in nvn_ext.c; a back
 // end that renders into host-side copies defines it and writes them back.

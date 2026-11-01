@@ -1,4 +1,4 @@
-// From totk-pc-recomp runtime/nvn_api_obj.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh), copied with totk renamed to fe3h only.
+// From totk-pc-recomp runtime/nvn_api_obj.c @ c944f9f94520874f2a669add30dd08d29ee9f7b5 (MIT, Copyright (c) 2026 Valiantsin Dzerakh); renamed to fe3h; tracks the live windows for nvn_window_uses_pool (FE3H frees a pool per loaded resource).
 // NVN front end, second slice: descriptor pools, textures, samplers, programs,
 // windows with present pacing, and the state objects. Ported from MacNativeGames
 // games/totk/third_party/d2r_gfx/gfx/nvn/hle_nvn.c @ b75be8cf (MIT, Copyright (c) 2026 jhaizhou; origin d2r-mobile),
@@ -594,6 +594,35 @@ NVN_API(nvnWindowGetNumActiveTextures) {
     ret_x(c, (uint32_t)(w->active ? w->active : w->ntex));
 }
 NVN_API(nvnWindowBuilderSetPresentInterval) { WB(c)->interval = (int)arg_x(c, 1); }
+// The windows alive, for nvn_window_uses_pool (vk_backend.c: a pool holding a window texture is freed only after the
+// queued presents reading it were submitted). One window in practice; four is the NVN-side limit this keeps.
+static win_t *g_windows[4];
+static SRWLOCK g_windows_lock = SRWLOCK_INIT;
+
+static void window_track(win_t *o, int alive) {
+    AcquireSRWLockExclusive(&g_windows_lock);
+    for (int i = 0; i < 4; i++)
+        if (alive ? !g_windows[i] : g_windows[i] == o) {
+            g_windows[i] = alive ? o : NULL;
+            break;
+        }
+    ReleaseSRWLockExclusive(&g_windows_lock);
+}
+
+int nvn_window_uses_pool(const pool_t *p) {
+    if (!p || !p->mem) return 0;
+    uintptr_t lo = (uintptr_t)p->mem, hi = lo + p->size;
+    int r = 0;
+    AcquireSRWLockShared(&g_windows_lock);
+    for (int i = 0; i < 4 && !r; i++)
+        for (int k = 0; g_windows[i] && k < g_windows[i]->ntex && k < 4 && !r; k++) {
+            const tex_t *t = (const tex_t *)g_windows[i]->tex[k];
+            r = t && (uintptr_t)t->mem >= lo && (uintptr_t)t->mem < hi;
+        }
+    ReleaseSRWLockShared(&g_windows_lock);
+    return r;
+}
+
 // NVNboolean nvnWindowInitialize(NVNwindow *w, const NVNwindowBuilder *b)
 NVN_API(nvnWindowInitialize) {
     win_t *o = arg_p(c, 0);
@@ -613,10 +642,11 @@ NVN_API(nvnWindowInitialize) {
     const tex_t *t0 = (const tex_t *)o->tex[0];
     NVN_LOG("WindowInitialize %d textures, interval %d, first %ux%u format %#x", o->ntex, o->interval,
             t0 ? t0->d.width : 0, t0 ? t0->d.height : 0, t0 ? t0->d.format : 0);
+    window_track(o, 1);
     ret_x(c, 1);
 }
-// void nvnWindowFinalize(NVNwindow *w): nothing to release (MNG lists it in g_nops)
-NVN_API(nvnWindowFinalize) { (void)c; }
+// void nvnWindowFinalize(NVNwindow *w): nothing to release (MNG lists it in g_nops) beyond the window list entry
+NVN_API(nvnWindowFinalize) { window_track(arg_p(c, 0), 0); }
 NVN_API(nvnWindowSetPresentInterval) {
     win_t *o = WN(c);
     int v = (int)arg_x(c, 1);

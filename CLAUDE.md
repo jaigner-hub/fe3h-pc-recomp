@@ -32,7 +32,9 @@ totk-pc-recomp is MIT (Copyright (c) 2026 Valiantsin Dzerakh). Every copy gets a
 
 ## Status
 
-Phase 0, the survey (`docs/plan.md`). No port code exists yet. Next steps:
+Phase 1: the game boots to its title screen (`docs/plan.md`, Phase 1). The repository on this machine is at
+`C:\dev\fe3h-pc-recomp`; build with Windows Python (`tools\build_game.py`) and run `build\v262144\fe3h.exe` in the
+foreground. Phase 0's survey steps are kept below for the record:
 
 1. The user fills in `config.local.toml` from `config.example.toml`.
 2. ~~Extract the ExeFS into `build/`, list the modules and their sizes.~~ Done: `tools/extract_exefs.py` writes `build/extracted/v0/exefs` and `build/extracted/v262144/exefs`; title id `010055D009F78000` confirmed.
