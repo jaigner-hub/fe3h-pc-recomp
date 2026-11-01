@@ -396,6 +396,7 @@ void vk_device_fault_report(VkResult r) {
     if (done) { ReleaseSRWLockExclusive(&lock); return; }
     done = 1;
     vk_crumbs_report();
+    vk_exec_fault_ops();
     VkCtx *c = vk_ctx();
     PFN_vkGetDeviceFaultInfoEXT get =
         c && c->has_device_fault ? (PFN_vkGetDeviceFaultInfoEXT)vkGetDeviceProcAddr(c->device, "vkGetDeviceFaultInfoEXT")

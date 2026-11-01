@@ -43,6 +43,10 @@ typedef struct {
 
 static VkExec X;
 static int x_ready;
+typedef struct { uint32_t op, fence; uint64_t w[3]; } OpTrace;   // vk_exec_fault_ops
+#define OPTRACE_N (1u << 16)
+static OpTrace optrace[OPTRACE_N];
+static uint64_t optrace_n;
 static _Thread_local int x_here;   // this thread is inside vk_exec_record (vk_exec_inline_begin)
 
 // ---- FE3H_TRACE=gfx frame counters
@@ -816,6 +820,14 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
         if (h->size < sizeof *h || (h->size & 7) || h->op >= OP_COUNT_)
             rt_fatal("vk: corrupt command record at %p: op %u size %u", (const void *)h, h->op, h->size);
         const void *a = nvn_op_payload(h);
+        {   // the op trace (vk_exec_fault_ops): the op, its submission and its first payload words
+            OpTrace *t = &optrace[optrace_n++ % OPTRACE_N];
+            t->op = h->op;
+            t->fence = (uint32_t)ex->fence;
+            uint32_t n = h->size > 8 ? h->size - 8 : 0;
+            memset(t->w, 0, sizeof t->w);
+            memcpy(t->w, a, n < sizeof t->w ? n : sizeof t->w);
+        }
         switch (h->op) {
         case OP_END: return;
         case OP_BEGIN: break;
@@ -901,6 +913,35 @@ static void walk(VkExec *ex, const op_hdr *h, int depth) {
         if (split_draws >= split_n) maybe_split(ex);
         h = nvn_op_next(h);
     }
+}
+
+// After a device loss (vk_device.c vk_device_fault_report): the ops of the last three submissions the trace holds,
+// decoded into fault-ops.txt next to the log, newest submission last. What the GPU was given where NVIDIA's crumbs
+// cannot say (vk_crumbs.c): the fault lies in the submission the breadcrumbs name, or the one before the submit that
+// failed.
+void vk_exec_fault_ops(void) {
+    const char *log = rt_log_path();
+    if (!log || !optrace_n) return;
+    char path[MAX_PATH * 3];
+    snprintf(path, sizeof path, "%s", log);
+    char *cut = strrchr(path, '\\');
+    snprintf(cut ? cut + 1 : path, sizeof path - (size_t)(cut ? cut + 1 - path : 0), "fault-ops.txt");
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    uint64_t newest = optrace[(optrace_n - 1) % OPTRACE_N].fence, from = newest > 2 ? newest - 2 : 1;
+    uint64_t first = optrace_n > OPTRACE_N ? optrace_n - OPTRACE_N : 0, lines = 0;
+    fprintf(f, "# ops of submissions %llu..%llu (op, payload words), from the trace of the last %u ops\n",
+            (unsigned long long)from, (unsigned long long)newest, OPTRACE_N);
+    for (uint64_t i = first; i < optrace_n; i++) {
+        const OpTrace *t = &optrace[i % OPTRACE_N];
+        if (t->fence < from) continue;
+        fprintf(f, "%u %s %#llx %#llx %#llx\n", t->fence, nvn_op_name(t->op), (unsigned long long)t->w[0],
+                (unsigned long long)t->w[1], (unsigned long long)t->w[2]);
+        lines++;
+    }
+    fclose(f);
+    rt_log("vk: %llu ops of submissions %llu..%llu written to %s", (unsigned long long)lines, (unsigned long long)from,
+           (unsigned long long)newest, path);
 }
 
 int vk_exec_record(VkCommandBuffer cb, const uint64_t *handles, int n, uint64_t fence) {

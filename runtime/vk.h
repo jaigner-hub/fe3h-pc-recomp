@@ -92,6 +92,7 @@ void vk_crumbs_release(void);
 // thread that records cb may call it: never into a replay part while the recorder thread owns it (vk_rec.h).
 void vk_crumb(VkCommandBuffer cb, int kind, uint64_t n);
 void vk_crumbs_report(void);         // logs the two codes and what they name
+void vk_exec_fault_ops(void);        // vk_exec.c: the last submissions' ops decoded next to the log
 
 // ---- window and present (gfx_window.c). Host threads only.
 // vk_present_image: blits the crop rectangle {x, y, w, h} of src (NULL, or w/h <= 0: the whole w x h image), scaled
