@@ -224,7 +224,9 @@ def build_python(out):
     # The embeddable Python ignores the script directory and PYTHONPATH once a ._pth file exists, so the folder's own code
     # (installer/, and tools/*.py and recomp/*.py importing their siblings) has to be on the list.
     env = dict(os.environ, UV_CACHE_DIR=str(MAIN_ROOT / 'toolchain' / 'uv-cache'))
-    run(['uv', 'pip', 'install', '--target', py / 'Lib' / 'site-packages', '--python', sys.executable,
+    # uv's own installer puts it in ~/.local/bin, which a shell started from WSL or a service may not have on PATH.
+    uv = shutil.which('uv') or Path.home() / '.local' / 'bin' / 'uv.exe'
+    run([uv, 'pip', 'install', '--target', py / 'Lib' / 'site-packages', '--python', sys.executable,
          '--python-platform', 'windows', '--python-version', '3.14', '--only-binary', ':all:',
          '-r', ROOT / 'tools' / 'requirements-installer.txt'], env=env)
     shutil.rmtree(py / 'Lib' / 'site-packages' / 'bin', ignore_errors=True)   # numpy/cffi console scripts
