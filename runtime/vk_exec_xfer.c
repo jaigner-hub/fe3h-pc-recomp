@@ -308,6 +308,16 @@ static int counter_word(uint64_t addr, uint64_t *v) {
     return 1;
 }
 
+// Diag: how much of the frame set depends on a conditional render the host evaluates from GPU-written counters. A draw
+// set that a stale counter skips would come and go between frames, which is what a vanishing element looks like.
+static uint64_t n_cond, n_cond_off, n_flag_off;
+
+void vk_cond_stats(uint64_t *cond, uint64_t *off, uint64_t *flag_off) {
+    if (cond) *cond = n_cond;
+    if (off) *off = n_cond_off;
+    if (flag_off) *flag_off = n_flag_off;
+}
+
 static int cond_enabled(const p_render_cond *c) {
     uint64_t x, y;
     int rx = counter_word(c->addr, &x), ry = counter_word(c->addr + 16, &y);
@@ -608,11 +618,16 @@ void vk_exec_op_xfer(VkExec *ex, uint32_t op, const void *payload) {
     case OP_REPORT_COUNTER: report_counter(ex, payload); break;
     case OP_RESET_COUNTER: reset_counter(ex, payload); break;
     case OP_CLEAR_BUF: clear_buf(ex, payload); break;
-    case OP_RENDER_ENABLE: ex->render_disabled = !((const p_flag *)payload)->value; break;
+    case OP_RENDER_ENABLE:
+        ex->render_disabled = !((const p_flag *)payload)->value;
+        if (ex->render_disabled) n_flag_off++;
+        break;
     case OP_RENDER_COND:
         ex->render_cond = *(const p_render_cond *)payload;
         ex->has_render_cond = 1;
         ex->render_disabled = !cond_enabled(payload);
+        n_cond++;
+        if (ex->render_disabled) n_cond_off++;
         break;
     default: rt_fatal("vk: op %s is not a transfer", nvn_op_name(op));
     }

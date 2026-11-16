@@ -989,6 +989,15 @@ void vk_texture_register(int id, const tex_t *t, const view_t *v) {
     unlock();
 }
 
+// Diag: how often a slot resolves to a texture it does not describe. The follow by swizzle is the intended one (a UI
+// render target sampled through another descriptor); the "any entry at that address" one is the guess that can hand a
+// slot another texture's pixels, which is what an element that keeps coming back after a re-register looks like.
+static uint64_t n_follow_swz, n_follow_any;
+void vk_texture_follow_stats(uint64_t *swz, uint64_t *any) {
+    if (swz) *swz = n_follow_swz;
+    if (any) *any = n_follow_any;
+}
+
 // The entry slot s resolves to, and the view and has_view a caller gets with it (the slot's, with the descriptor's
 // swizzle when the entry is another descriptor at the same storage). NULL when the slot names no texture.
 static Tex *slot_resolve(TexSlot *s, view_t *view, int *has_view) {
@@ -1008,7 +1017,16 @@ static Tex *slot_resolve(TexSlot *s, view_t *view, int *has_view) {
             if (!any) any = p;
             if (same_but_swizzle(&p->key, &k)) { e = p; break; }
         }
-        if (!e) e = any ? any : own;
+        if (!e && any) {
+            e = any;
+            if (n_follow_any < 8)
+                rt_log("diag: a slot for %ux%u format %d follows %ux%u format %d at its storage (no descriptor matches)",
+                       s->t.d.width, s->t.d.height, (int)s->t.d.format, e->pub.width, e->pub.height, (int)e->pub.format);
+            n_follow_any++;
+        } else if (e) {
+            n_follow_swz++;
+        }
+        if (!e) e = own;
     }
     if (!e) e = s->t.mem ? entry_of(&s->t) : NULL;
     // A followed texture is another descriptor at the same storage: its image holds the content, but sampling takes the
@@ -1710,6 +1728,16 @@ void vk_texture_census(VkTexCensus *s) {
         else s->live++, s->own_live += e->alloc != NULL, s->bytes_live += bytes;
     }
     unlock();
+}
+
+// Diag (nvn_api_obj.c nvnTexturePoolRegisterImage): whether the slot an image register takes already held a descriptor.
+// An image and a texture share the pool and the id space, so a slot that was in use means the image hides that texture.
+int vk_texture_slot_used(int id) {
+    int used;
+    lock();
+    used = id >= 0 && id < ntslots && tslots[id].used;
+    unlock();
+    return used;
 }
 
 void vk_texture_shutdown(void) {
