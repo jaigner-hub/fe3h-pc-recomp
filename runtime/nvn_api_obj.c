@@ -18,6 +18,7 @@
 #include "nvn_api.h"
 #include "nvn_hmap.h"
 #include "nvn_tex.h"
+#include "vk.h"
 
 // ---------- Descriptor pools
 // An NVN texture or sampler id indexes the pool bound with SetTexturePool / SetSamplerPool; the back end keeps one slot
@@ -64,6 +65,41 @@ NVN_API(nvnTexturePoolFinalize) { (void)c; }
 // void nvnTexturePoolRegisterTexture(const NVNtexturePool *tp, int id, const NVNtexture *t, const NVNtextureView *v)
 NVN_API(nvnTexturePoolRegisterTexture) {
     gfx_backend()->texture_register(nvn_tpool_slot(arg_p(c, 0), (int)arg_x(c, 1)), arg_p(c, 2), arg_p(c, 3));
+}
+// void nvnTexturePoolRegisterImage(const NVNtexturePool *tp, int id, const NVNtexture *t, const NVNtextureView *v)
+// An image (a writable texture for imageLoad / imageStore) is a descriptor of the same pool and the same id space as a
+// texture, and FE3H names one by its pool index (nvnDeviceGetImageHandle, nvnCommandBufferBindImage). The replay
+// resolves an image handle through the same slot table a texture handle uses (vk_exec_draw.c type_of_handle, and
+// bind_handles with kind 2 keeping the texture id), so an image registration is a texture registration. FE3H calls this
+// the first time a pass samples a computed target; the upstream stub stopped the process there.
+static unsigned long long n_image_reg, n_image_took_used;   // diag: image registrations, and those over a live texture slot
+void nvn_image_stats(unsigned long long *reg, unsigned long long *took_used) {
+    if (reg) *reg = n_image_reg;
+    if (took_used) *took_used = n_image_took_used;
+}
+
+NVN_API(nvnTexturePoolRegisterImage) {
+    const tex_t *t = arg_p(c, 2);
+    int slot = nvn_tpool_slot(arg_p(c, 0), (int)arg_x(c, 1));
+    if (!t) {
+        rt_log("nvn: image id %d registered without a descriptor", (int)arg_x(c, 1));
+        return;
+    }
+    // Diag: an image and a texture share the pool and its id space, so a slot that already held a descriptor means this
+    // image replaces that texture for every draw that binds the id (a texture that samples as another image would show as
+    // an element that comes and goes). The count says whether FE3H reuses ids across the two kinds at all.
+    n_image_reg++;
+    if (vk_texture_slot_used(slot)) {
+        if (n_image_took_used < 8) rt_log("nvn: image id %d takes slot %d that already held a texture", (int)arg_x(c, 1), slot);
+        n_image_took_used++;
+    }
+    gfx_backend()->texture_register(slot, t, arg_p(c, 3));
+    static int logged;
+    if (logged < 8) {
+        logged++;
+        rt_log("nvn: image id %d -> slot %d: %ux%u fmt %d levels %u%s", (int)arg_x(c, 1), slot, t->d.width,
+               t->d.height, t->d.format, t->d.levels, arg_p(c, 3) ? ", with a view" : "");
+    }
 }
 // NVNboolean nvnSamplerPoolInitialize(NVNsamplerPool *sp, const NVNmemoryPool *p, ptrdiff_t offset, int n)
 NVN_API(nvnSamplerPoolInitialize) {

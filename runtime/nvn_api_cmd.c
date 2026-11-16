@@ -171,6 +171,9 @@ static SRWLOCK copy_lock = SRWLOCK_INIT;    // guards the two maps, the counters
 static nvn_hmap copy_pages = {.klen = 8};   // page -> copy_bucket
 static nvn_hmap copy_live = {.klen = 8};    // handle -> copy_prefix of a live copy
 static uint64_t ncopies, copy_bytes, copies_made, nsubmits;
+// Lifecycle counters for the memory trend (prof_win.c): a recording copy is retired only when AddControlMemory hands
+// the same storage back, so the ratio of AddControlMemory to EndRecording says whether this game ever recycles it.
+static uint64_t n_addctl, n_finalize, n_begin;
 // Asynchronous replay: copies released by the game, and per-submission clones, that a queued submission still reads.
 // Freed once gfx_replayed_submits() reaches their used_at. Empty with synchronous replay.
 static copy_prefix **zombies;
@@ -213,6 +216,21 @@ uint64_t nvn_handle_bytes(uint64_t handle) {
     uint64_t n = pf ? pf->bytes : 0;
     ReleaseSRWLockShared(&copy_lock);
     return n;
+}
+
+// The live recording copies and their bytes, for the memory trend (prof_win.c): a copy the game no longer owns is
+// freed when the control memory that held its handle is added again, so growth here means copies the game kept.
+void nvn_copy_stats(uint64_t *live, uint64_t *bytes) {
+    AcquireSRWLockShared(&copy_lock);
+    if (live) *live = ncopies;
+    if (bytes) *bytes = copy_bytes;
+    ReleaseSRWLockShared(&copy_lock);
+}
+
+void nvn_cmd_counters(uint64_t *addctl, uint64_t *finalize, uint64_t *begin) {
+    if (addctl) *addctl = n_addctl;
+    if (finalize) *finalize = n_finalize;
+    if (begin) *begin = n_begin;
 }
 
 // Marks a live copy used by submission now; its size from OP_BEGIN to OP_END inclusive.
@@ -309,6 +327,38 @@ static void release_copies(uintptr_t lo, uintptr_t hi) {
 }
 
 // ---------- CommandBuffer: object and memory
+
+// Retiring a copy the game no longer submits. Reusing its control memory is the hardware's way of releasing a recording
+// handle, and FE3H's control memory only moves forward: AddControlMemory runs once a frame, while Finalize ran 425 times
+// in a whole run and never again. Every frame's recordings therefore stay live, and the copies grew by about 380 MiB a
+// minute until an allocation failed (22 GB, "nvn: command copy allocation"). A handle is submitted every frame while the
+// game uses it, so a copy whose last submit is COPY_RETIRE submissions old cannot still be pending: retire it.
+#define COPY_RETIRE 7200   // submissions, a couple of minutes at this game's submit rate (2.5 a frame)
+static void retire_old_copies(uint64_t now) {   // copy_lock held exclusive
+    uint64_t cut = now > COPY_RETIRE ? now - COPY_RETIRE : 0;
+    if (!cut) return;
+    uint64_t replayed = gfx_replayed_submits();
+    if (nzombies) zombie_sweep(replayed);
+    for (uint32_t i = 0; i < copy_pages.cap; i++) {
+        copy_bucket *b = copy_pages.vals[i];
+        if (!b || !b->n) continue;
+        for (uint32_t j = 0; j < b->n;) {
+            cmd_copy *k = &b->v[j];
+            copy_prefix *pf = (copy_prefix *)k->copy - 1;
+            if (!pf->used_at || pf->used_at >= cut) { j++; continue; }   // never submitted, or still in use
+            uint64_t handle = (uintptr_t)k->copy;
+            nvn_hm_del(&copy_live, &handle);
+            ncopies--;
+            copy_bytes -= pf->bytes;
+            pf->magic = 0;
+            if (pf->used_at > replayed) zombie_add(pf);
+            else free(pf);
+            b->v[j] = b->v[--b->n];
+        }
+        if (!b->n) free(b->v), b->v = NULL, b->cap = 0;   // the bucket stays: a page index die at the next copy, not a growing table
+    }
+}
+
 // NVNboolean nvnCommandBufferInitialize(NVNcommandBuffer *cmd, NVNdevice *device): the inline fast-path fields are kept
 // at ~0 / 0 so NVN 55 inline code never finds room and calls the API (nvn_obj.h cmd_t)
 NVN_API(nvnCommandBufferInitialize) {
@@ -324,6 +374,7 @@ NVN_API(nvnCommandBufferInitialize) {
 // void nvnCommandBufferFinalize(NVNcommandBuffer *cmd): handles outlive their recorder
 NVN_API(nvnCommandBufferFinalize) {
     cmd_t *o = cmd_of(c);
+    n_finalize++;
     free(o->seg);
     o->seg = o->cur = o->end = NULL;
     o->magic = 0;
@@ -357,6 +408,7 @@ NVN_API(nvnCommandBufferAddControlMemory) {
     cmd_t *o = cmd_of(c);
     void *m = arg_p(c, 1);
     size_t n = arg_x(c, 2);
+    n_addctl++;
     release_copies((uintptr_t)m, (uintptr_t)m + n);
     o->ctl = m;
     o->ctl_size = n;
@@ -376,6 +428,7 @@ NVN_API(nvnCommandBufferGetCommandMemoryFree) { const cmd_t *o = cmd_of(c); ret_
 // void nvnCommandBufferBeginRecording(NVNcommandBuffer *cmd)
 NVN_API(nvnCommandBufferBeginRecording) {
     cmd_t *o = cmd_of(c);
+    n_begin++;
     if (o->recording) rt_log("nvn: BeginRecording on command buffer %p while it records", (void *)o);
     o->recording = 1;
     o->cur = o->seg;   // the previous recording was copied at EndRecording
@@ -915,6 +968,11 @@ void nvn_submit_prepare(const uint64_t *handles, int n) {
     uint64_t now = __atomic_add_fetch(&nsubmits, 1, __ATOMIC_RELAXED);
     for (int i = 0; i < n; i++) copy_touch(handles[i], now, "QueueSubmitCommands");
     for (int i = 0; i < n; i++) resolve_deferred((const uint8_t *)(uintptr_t)handles[i], 0);
+    if (!(now & 255)) {   // every 256 submissions: retire the copies the game stopped coming back to
+        AcquireSRWLockExclusive(&copy_lock);
+        retire_old_copies(now);
+        ReleaseSRWLockExclusive(&copy_lock);
+    }
 }
 
 // Asynchronous replay. A copy a queued submission still reads keeps that submission's deferred binds: when it holds

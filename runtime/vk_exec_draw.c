@@ -28,6 +28,7 @@
 #include "nvn_hmap.h"
 #include "vk.h"
 #include "vk_exec.h"
+#include "tex.h"   // tex_vk_format: a view that reinterprets its texture's format (get_view)
 
 #define MAX_BINDINGS 128
 #define MAX_DESC 1024
@@ -39,10 +40,32 @@
 #define NVN_STAGE_CS 5
 #define ONESHOT_WAIT_MS 30000u   // prepare_draw: how long a one-shot draw waits for its pipeline before it is skipped
 
-enum { W_PROGRAM, W_SHADER, W_PIPELINE, W_NO_VS, W_INDEX, W_UB, W_BIND, W_SSBO_ALIGN, W_SSBO_SLOT, W_RESTART, W_INDIRECT, W_COUNT };
+enum { W_PROGRAM, W_SHADER, W_PIPELINE, W_NO_VS, W_INDEX, W_UB, W_BIND, W_SSBO_ALIGN, W_SSBO_SLOT, W_RESTART, W_INDIRECT,
+       W_VIEWFMT, W_COUNT };
+
+// Every path that drops a draw, a dispatch or a binding reports here first (warn_once), so one counter per key says which
+// of them keeps happening: a frame set that comes and goes leaves its reason climbing, a logged-once message hides it.
+static const char *const warn_names[W_COUNT] = {"program", "shader", "pipeline", "no_vertex_stage", "index", "uniform",
+                                                "bind", "ssbo_align", "ssbo_slot", "restart", "indirect", "view_format"};
+static uint64_t warn_counts[W_COUNT];
+
+void vk_warn_report(void) {
+    char line[640];
+    size_t at = 0;
+    line[0] = 0;
+    for (int i = 0; i < W_COUNT; i++) {
+        if (!warn_counts[i]) continue;
+        int n = snprintf(line + at, sizeof line - at, "%s%s=%llu", at ? " " : "", warn_names[i],
+                         (unsigned long long)warn_counts[i]);
+        if (n < 0 || (size_t)n >= sizeof line - at) break;
+        at += (size_t)n;
+    }
+    rt_log("diag: warn counts %s", at ? line : "(none)");
+}
 
 static void warn_once(int key, const char *fmt, ...) {
     static volatile long seen[W_COUNT];
+    warn_counts[key]++;
     if (__atomic_exchange_n(&seen[key], 1, __ATOMIC_RELAXED)) return;
     char msg[256];
     va_list ap;
@@ -51,6 +74,63 @@ static void warn_once(int key, const char *fmt, ...) {
     va_end(ap);
     rt_log("vk: %s (logged once)", msg);
 }
+
+// ---- diagnostics: which textures a view reinterprets, and how often (the washed out colours of FE3H came from this
+// path; a view taken here changes how a texture samples, so a disappearing element has to be ruled in or out). FE3H_VIEWFMT=0
+// turns the reinterpretation off, so one restart tells whether an artefact belongs to it.
+#define VF_PAIRS 8
+static struct VfPair { int img_fmt, nvn_fmt, vk_fmt; uint32_t w, h; uint64_t n; } vf_pairs[VF_PAIRS];
+static int vf_npairs;
+static uint64_t vf_total;
+
+static int vf_mode(void) {
+    // FE3H_VIEWFMT: 0 none, 1 block-compressed images only, 2 uncompressed 8-bit images only, unset/3 all. The graded
+    // values exist because the reinterpretation fixed the washed out colours but one interface element (the map
+    // cursor's tile highlight) vanished intermittently while it was on, and the two classes are told apart by a restart.
+    static volatile long mode = -1;
+    long m = __atomic_load_n(&mode, __ATOMIC_RELAXED);
+    if (m < 0) {
+        const char *e = cfg_get("FE3H_VIEWFMT");
+        m = 3;
+        if (e && e[0] && !e[1]) m = e[0] - '0';
+        if (m < 0 || m > 3) m = 3;
+        __atomic_store_n(&mode, m, __ATOMIC_RELAXED);
+        rt_log("diag: view format reinterpretation %s",
+               m == 0 ? "off" : m == 1 ? "on for block-compressed images only"
+                                       : m == 2 ? "on for uncompressed 8-bit images only" : "on for every image");
+    }
+    return (int)m;
+}
+
+static int vf_wants(int img_fmt) {
+    int m = vf_mode();
+    if (!m) return 0;
+    if (m == 3) return 1;
+    int bc = img_fmt >= (int)VK_FORMAT_BC1_RGB_UNORM_BLOCK && img_fmt <= (int)VK_FORMAT_BC7_SRGB_BLOCK;
+    return m == 1 ? bc : !bc;
+}
+
+static void vf_note(int img_fmt, unsigned nvn_fmt, VkFormat vk_fmt, uint32_t w, uint32_t h) {
+    vf_total++;
+    for (int i = 0; i < vf_npairs; i++)
+        if (vf_pairs[i].img_fmt == img_fmt && vf_pairs[i].nvn_fmt == (int)nvn_fmt) { vf_pairs[i].n++; return; }
+    if (vf_npairs >= VF_PAIRS) return;
+    vf_pairs[vf_npairs++] = (struct VfPair){img_fmt, (int)nvn_fmt, (int)vk_fmt, w, h, 1};
+    rt_log("diag: a view reinterprets image format %d as NVN format %u (vk %d), first at %ux%u", img_fmt, nvn_fmt,
+           (int)vk_fmt, w, h);
+}
+
+void vk_viewfmt_report(void) {
+    for (int i = 0; i < vf_npairs; i++)
+        rt_log("diag: view format image %d -> NVN %u (vk %d): %llu views, first image %ux%u", vf_pairs[i].img_fmt,
+               (unsigned)vf_pairs[i].nvn_fmt, vf_pairs[i].vk_fmt, (unsigned long long)vf_pairs[i].n,
+               vf_pairs[i].w, vf_pairs[i].h);
+    rt_log("diag: reinterpreted views %llu in %d distinct pairs (mode %d)", (unsigned long long)vf_total, vf_npairs,
+           vf_mode());
+}
+
+static uint64_t n_restart_refused;
+void vk_restart_stats(uint64_t *refused) { if (refused) *refused = n_restart_refused; }
 
 static void *grow(void *p, int *cap, size_t elem) {
     *cap = *cap ? *cap * 2 : 8;
@@ -504,30 +584,55 @@ static VkImageView get_view(VkExec *ex, const VkTexImage *img, const view_t *v, 
     }
     if (storage && cube) vt = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
     uint32_t aspect = vk_exec_view_aspect(img, v, hv);
+    // NVN texture views reinterpret their texture's format (nvnTextureViewSetFormat): Koei Tecmo games read an sRGB
+    // albedo texture created as BC3_UNORM through a BC3_SRGB view. vk_texture.c creates every colour image
+    // MUTABLE_FORMAT for this, but the view was built with img->format, so the hardware sRGB->linear conversion never
+    // happened and those textures sampled about 2.2x too bright - the washed out, contrast-free characters. Resolve the
+    // view's own format here; the image's stays the fallback, and depth/stencil and storage views keep it.
+    VkFormat view_fmt = img->format;
+    uint8_t v_alpha_one = img->alpha_one, v_chan[4];
+    memcpy(v_chan, img->chan, 4);
+    TexVkFormat vf;
+    if (hv && v->set_format && v->format && !storage && aspect == VK_IMAGE_ASPECT_COLOR_BIT && vf_wants((int)img->format) &&
+        tex_vk_format((int)v->format, &vf) && vf.vk != VK_FORMAT_UNDEFINED) {
+        view_fmt = vf.vk, v_alpha_one = vf.alpha_one;
+        memcpy(v_chan, vf.chan, 4);
+        if (view_fmt != img->format) {
+            warn_once(W_VIEWFMT, "a texture view reinterprets format %d through NVN format %u", (int)img->format,
+                      (unsigned)v->format);
+            vf_note((int)img->format, v->format, view_fmt, img->width, img->height);
+        }
+    }
     uint8_t sw[4] = {NVN_TEXTURE_SWIZZLE_R, NVN_TEXTURE_SWIZZLE_G, NVN_TEXTURE_SWIZZLE_B, NVN_TEXTURE_SWIZZLE_A};
     if (!storage) {   // MNG nvn_mtl.m tex_swizzle_sel: view selectors replace the texture's, then the format remap
         memcpy(sw, hv && v->set_swizzle ? v->swz : img->swz, 4);
-        if (img->alpha_one || img->chan[0])
+        if (v_alpha_one || v_chan[0])
             for (int i = 0; i < 4; i++) {
-                if (img->alpha_one && sw[i] == NVN_TEXTURE_SWIZZLE_A) sw[i] = NVN_TEXTURE_SWIZZLE_ONE;
-                else if (img->chan[0] && sw[i] >= NVN_TEXTURE_SWIZZLE_R && sw[i] <= NVN_TEXTURE_SWIZZLE_A)
-                    sw[i] = img->chan[sw[i] - NVN_TEXTURE_SWIZZLE_R];
+                if (v_alpha_one && sw[i] == NVN_TEXTURE_SWIZZLE_A) sw[i] = NVN_TEXTURE_SWIZZLE_ONE;
+                else if (v_chan[0] && sw[i] >= NVN_TEXTURE_SWIZZLE_R && sw[i] <= NVN_TEXTURE_SWIZZLE_A)
+                    sw[i] = v_chan[sw[i] - NVN_TEXTURE_SWIZZLE_R];
             }
     }
     uint32_t swz = (uint32_t)sw[0] | (uint32_t)sw[1] << 8 | (uint32_t)sw[2] << 16 | (uint32_t)sw[3] << 24;
-    ViewKey k = {img->image, img->format, vt, aspect, l0, nl, y0, ny, swz};
+    ViewKey k = {img->image, view_fmt, vt, aspect, l0, nl, y0, ny, swz};
     if (!view_of.klen) nvn_hm_init(&view_of, sizeof(ViewKey)), nvn_hm_init(&views_by_image, sizeof(VkImage));
     VkImageView found = (VkImageView)nvn_hm_get(&view_of, &k);
     if (found) return found;
     VkImageViewCreateInfo ci = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, .image = img->image, .viewType = vt,
-                                .format = img->format,
+                                .format = view_fmt,
                                 .components = {swz_of(sw[0]), swz_of(sw[1]), swz_of(sw[2]), swz_of(sw[3])},
                                 .subresourceRange = {aspect, l0, nl, y0, ny}};
     VkImageViewUsageCreateInfo use = {.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
                                       .usage = VK_IMAGE_USAGE_SAMPLED_BIT};
     if (img->block_views) ci.pNext = &use;   // the image's COLOR_ATTACHMENT usage is its block views' (vk_texture.c)
     VkImageView view;
-    if (vkCreateImageView(vk_ctx()->device, &ci, NULL, &view) != VK_SUCCESS) return VK_NULL_HANDLE;
+    if (vkCreateImageView(vk_ctx()->device, &ci, NULL, &view) != VK_SUCCESS) {
+        if (view_fmt == img->format) return VK_NULL_HANDLE;
+        // The view's format does not fit the image after all (different block size or class): back to the image's.
+        warn_once(W_VIEWFMT, "a view format does not fit image format %d; the view keeps the image's", (int)img->format);
+        ci.format = img->format, k.format = img->format;
+        if (vkCreateImageView(vk_ctx()->device, &ci, NULL, &view) != VK_SUCCESS) return VK_NULL_HANDLE;
+    }
     ViewNode *n = malloc(sizeof *n);
     if (!n) rt_fatal("vk: out of memory");
     *n = (ViewNode){nvn_hm_get(&views_by_image, &img->image), k, view};
@@ -2172,7 +2277,12 @@ static int restart_for(const VkExec *ex, int prim, int itype) {
     default: return 0;   // lists: a restart index only drops the unfinished primitive
     }
     static const uint32_t all_ones[3] = {0xffu, 0xffffu, 0xffffffffu};
-    if (ex->prim_restart.index == all_ones[itype]) return 1;
+    // NVN compares the restart value at the index width, so a value wider than the index type restarts at its low bits:
+    // 0xffffffff over 16-bit indices restarts at 0xffff, which is exactly Vulkan's all-ones restart. Comparing the raw
+    // value dropped the restart and drew every such strip as one run (FE3H sets 0xffffffff), so the triangles around the
+    // restart index fetched vertex 65535 and went missing.
+    if ((ex->prim_restart.index & all_ones[itype]) == all_ones[itype]) return 1;
+    n_restart_refused++;
     warn_once(W_RESTART, "primitive restart index %#x with %d-byte indices is not replayed: strips drawn without restart",
               ex->prim_restart.index, 1 << itype);
     return 0;

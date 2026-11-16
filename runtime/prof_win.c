@@ -445,6 +445,62 @@ static struct {
 } ft;
 static uint64_t summary_t0;   // start of the current period (0: not started)
 
+// Memory trend, one line per period. A long run that grows until an allocation fails needs the split between host-side
+// growth (a table, a cache, a copy) and GPU-side growth (VMA); the counters are the tables that can grow per frame:
+// the texture entries, the recording copies and the descriptor slots.
+int vk_mem_vram(uint64_t *used, uint64_t *budget, int *exact);
+void nvn_copy_stats(uint64_t *live, uint64_t *bytes);
+void nvn_cmd_counters(uint64_t *addctl, uint64_t *finalize, uint64_t *begin);
+// vk.h VkTexCensus: entries now, live and released, with the bytes of their own memory
+typedef struct { uint64_t live, released, own_live, own_released, bytes_live, bytes_released; } VkTexCensus;
+void vk_texture_census(VkTexCensus *s);
+// The render paths an element that comes and goes can belong to: a view that reinterprets a texture's format, a frame
+// set chosen by a conditional render, a strip whose restart is not replayed, an image register over a texture slot.
+void vk_viewfmt_report(void);
+void vk_restart_stats(uint64_t *refused);
+void vk_cond_stats(uint64_t *cond, uint64_t *off, uint64_t *flag_off);
+void nvn_image_stats(unsigned long long *reg, unsigned long long *took_used);
+void vk_warn_report(void);
+void vk_texture_follow_stats(uint64_t *swz, uint64_t *any);
+
+static void mem_trend(void) {
+    PROCESS_MEMORY_COUNTERS_EX mc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS *)&mc, sizeof mc))
+        rt_log("mem trend: commit %llu MB, private %llu MB, working set %llu MB",
+               (unsigned long long)(mc.PagefileUsage >> 20), (unsigned long long)(mc.PrivateUsage >> 20),
+               (unsigned long long)(mc.WorkingSetSize >> 20));
+    uint64_t used = 0, budget = 0;
+    int exact = 0;
+    if (vk_mem_vram(&used, &budget, &exact))
+        rt_log("mem trend: vram %llu MB of %llu MB", (unsigned long long)(used >> 20), (unsigned long long)(budget >> 20));
+    uint64_t copies = 0, cbytes = 0;
+    nvn_copy_stats(&copies, &cbytes);
+    VkTexCensus cs;
+    vk_texture_census(&cs);
+    rt_log("mem trend: recording copies %llu live %llu MB; textures %llu live %llu MB, %llu released %llu MB",
+           (unsigned long long)copies, (unsigned long long)(cbytes >> 20), (unsigned long long)cs.live,
+           (unsigned long long)(cs.bytes_live >> 20), (unsigned long long)cs.released,
+           (unsigned long long)(cs.bytes_released >> 20));
+    uint64_t addctl = 0, fin = 0, begin = 0;
+    nvn_cmd_counters(&addctl, &fin, &begin);
+    rt_log("mem trend: AddControlMemory %llu, BeginRecording %llu, Finalize %llu", (unsigned long long)addctl,
+           (unsigned long long)begin, (unsigned long long)fin);
+    uint64_t cond = 0, cond_off = 0, flag_off = 0, restart = 0;
+    vk_cond_stats(&cond, &cond_off, &flag_off);
+    vk_restart_stats(&restart);
+    unsigned long long imgreg = 0, imgtook = 0;
+    nvn_image_stats(&imgreg, &imgtook);
+    rt_log("diag: conditional render %llu (%llu rendering nothing); render disable %llu; restart refused %llu; image "
+           "registers %llu (%llu over a texture slot)", (unsigned long long)cond, (unsigned long long)cond_off,
+           (unsigned long long)flag_off, (unsigned long long)restart, imgreg, imgtook);
+    vk_viewfmt_report();
+    uint64_t fswz = 0, fany = 0;
+    vk_texture_follow_stats(&fswz, &fany);
+    rt_log("diag: slots following another texture at their storage: %llu by swizzle, %llu by address only",
+           (unsigned long long)fswz, (unsigned long long)fany);
+    vk_warn_report();
+}
+
 static void ft_report(uint64_t now, const char *tag) {
     if (ft.frames && ft.sum) {
         uint64_t cut = (ft.frames + 99) / 100, acc = 0, low = 0;   // the slowest 1% of frames
@@ -463,6 +519,7 @@ static void ft_report(uint64_t now, const char *tag) {
                    (w->wait[PERF_FENCE] + w->wait[PERF_DRAIN]) / 1e6, w->wait[PERF_PACE] / 1e6);
         }
     }
+    if (summary_t0) mem_trend();
     memset(&ft, 0, sizeof ft);
     ft.t0 = now;
 }
